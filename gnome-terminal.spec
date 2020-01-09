@@ -9,7 +9,7 @@
 Summary: Terminal emulator for GNOME
 Name: gnome-terminal
 Version: 2.31.3
-Release: 8%{?dist}
+Release: 11%{?dist}
 License: GPLv2+ and GFDL
 Group: User Interface/Desktops
 URL: http://www.gnome.org/
@@ -43,6 +43,9 @@ Patch8: gnome-terminal-urls-with-colons.patch
 # [ALL_LANG] Translation tracker for gnome-terminal
 # https://bugzilla.redhat.com/show_bug.cgi?id=819796
 Patch9: gnome-terminal-bz-819796-trans.patch
+
+# https://bugzilla.redhat.com/show_bug.cgi?id=1055726
+Patch10: 0001-Make-the-ActiveTerminal-field-in-the-config-file-for.patch
 
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
@@ -84,6 +87,7 @@ clickable URLs.
 %patch7 -p1 -b .search-regexp
 %patch8 -p1 -b .urls-with-colons
 %patch9 -p2 -b .translations2
+%patch10 -p1 -b .active-terminal
 
 %build
 
@@ -167,6 +171,15 @@ scrollkeeper-update -q
 %{_sysconfdir}/gconf/schemas/gnome-terminal.schemas
 
 %changelog
+* Mon Mar 23 2015 Debarshi Ray <rishi@fedoraproject.org> - 2.31.3-11
+- Improve the ActiveTerminal patch to fix focussing issues (#1055726)
+
+* Fri Mar 13 2015 Debarshi Ray <rishi@fedoraproject.org> - 2.31.3-10
+- Bump to resolve Z-stream dist confusion (#1055726)
+
+* Thu Mar 12 2015 Debarshi Ray <rishi@fedoraproject.org> - 2.31.3-9
+- Make the ActiveTerminal field in the config file format work (#1055726)
+
 * Fri Sep 21 2012 Tomas Bzatek <tbzatek@redhat.com> - 2.31.3-8
 - Updated translations (#819796)
 

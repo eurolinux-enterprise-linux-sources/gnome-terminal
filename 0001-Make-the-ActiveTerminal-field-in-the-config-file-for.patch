@@ -1,0 +1,148 @@
+From b93b34370dfde71281e91011021a00b4cd468289 Mon Sep 17 00:00:00 2001
+From: Debarshi Ray <debarshir@gnome.org>
+Date: Tue, 10 Mar 2015 20:04:31 +0100
+Subject: [PATCH] Make the ActiveTerminal field in the config file format work
+
+https://bugzilla.gnome.org/show_bug.cgi?id=745958
+---
+ src/terminal-app.c     |   12 +++++++-----
+ src/terminal-options.c |    6 ++++++
+ src/terminal-window.c  |   26 ++++++++++++++++----------
+ 3 files changed, 29 insertions(+), 15 deletions(-)
+
+diff --git a/src/terminal-app.c b/src/terminal-app.c
+index 39ea6bc..d6a0d7f 100644
+--- a/src/terminal-app.c
++++ b/src/terminal-app.c
+@@ -1746,6 +1746,7 @@ terminal_app_handle_options (TerminalApp *app,
+       InitialWindow *iw = lw->data;
+       TerminalWindow *window;
+       GList *lt;
++      gboolean seen_active_tab = FALSE;
+ 
+       g_assert (iw->tabs);
+ 
+@@ -1812,8 +1813,12 @@ terminal_app_handle_options (TerminalApp *app,
+                                               options->env,
+                                               it->zoom_set ? it->zoom : options->zoom);
+ 
+-          if (it->active)
+-            terminal_window_switch_screen (window, screen);
++          if (!seen_active_tab || it->active)
++            {
++              terminal_window_switch_screen (window, screen);
++              gtk_widget_grab_focus (GTK_WIDGET (screen));
++              seen_active_tab = it->active;
++            }
+         }
+ 
+       if (iw->geometry)
+@@ -1869,9 +1874,6 @@ terminal_app_new_terminal (TerminalApp     *app,
+                                 working_dir, child_env, zoom);
+ 
+   terminal_window_add_screen (window, screen, -1);
+-  terminal_window_switch_screen (window, screen);
+-  gtk_widget_grab_focus (GTK_WIDGET (screen));
+-
+   return screen;
+ }
+ 
+diff --git a/src/terminal-options.c b/src/terminal-options.c
+index 39ef2ba..ad431a9 100644
+--- a/src/terminal-options.c
++++ b/src/terminal-options.c
+@@ -828,6 +828,7 @@ terminal_options_merge_config (TerminalOptions *options,
+   for (i = 0; groups[i]; ++i)
+     {
+       const char *window_group = groups[i];
++      char *active_terminal;
+       char **tab_groups;
+       InitialWindow *iw;
+       guint j;
+@@ -840,6 +841,7 @@ terminal_options_merge_config (TerminalOptions *options,
+       initial_windows = g_list_append (initial_windows, iw);
+       apply_defaults (options, iw);
+ 
++      active_terminal = g_key_file_get_string (key_file, window_group, TERMINAL_CONFIG_WINDOW_PROP_ACTIVE_TAB, NULL);
+       iw->role = g_key_file_get_string (key_file, window_group, TERMINAL_CONFIG_WINDOW_PROP_ROLE, NULL);
+       iw->geometry = g_key_file_get_string (key_file, window_group, TERMINAL_CONFIG_WINDOW_PROP_GEOMETRY, NULL);
+       iw->start_fullscreen = g_key_file_get_boolean (key_file, window_group, TERMINAL_CONFIG_WINDOW_PROP_FULLSCREEN, NULL);
+@@ -862,6 +864,9 @@ terminal_options_merge_config (TerminalOptions *options,
+ 
+           iw->tabs = g_list_append (iw->tabs, it);
+ 
++          if (g_strcmp0 (active_terminal, tab_group) == 0)
++            it->active = TRUE;
++
+ /*          it->width = g_key_file_get_integer (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_WIDTH, NULL);
+           it->height = g_key_file_get_integer (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_HEIGHT, NULL);*/
+           it->working_dir = terminal_util_key_file_get_string_unescape (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_WORKING_DIRECTORY, NULL);
+@@ -875,6 +880,7 @@ terminal_options_merge_config (TerminalOptions *options,
+             }
+         }
+ 
++      g_free (active_terminal);
+       g_strfreev (tab_groups);
+ 
+       if (have_error)
+diff --git a/src/terminal-window.c b/src/terminal-window.c
+index 335e046..7ffb7ac 100644
+--- a/src/terminal-window.c
++++ b/src/terminal-window.c
+@@ -2964,6 +2964,7 @@ file_new_window_callback (GtkAction *action,
+ {
+   TerminalWindowPrivate *priv = window->priv;
+   TerminalApp *app;
++  TerminalScreen *screen;
+   TerminalWindow *new_window;
+   TerminalProfile *profile;
+   char *new_working_directory;
+@@ -2984,11 +2985,13 @@ file_new_window_callback (GtkAction *action,
+   new_window = terminal_app_new_window (app, gtk_widget_get_screen (GTK_WIDGET (window)));
+ 
+   new_working_directory = terminal_screen_get_current_dir_with_fallback (priv->active_screen);
+-  terminal_app_new_terminal (app, new_window, profile,
+-                             NULL, NULL,
+-                             new_working_directory,
+-                             terminal_screen_get_initial_environment (priv->active_screen),
+-                             1.0);
++  screen = terminal_app_new_terminal (app, new_window, profile,
++                                      NULL, NULL,
++                                      new_working_directory,
++                                      terminal_screen_get_initial_environment (priv->active_screen),
++                                      1.0);
++  terminal_window_switch_screen (window, screen);
++  gtk_widget_grab_focus (GTK_WIDGET (screen));
+   g_free (new_working_directory);
+ 
+   gtk_window_present (GTK_WINDOW (new_window));
+@@ -3001,6 +3004,7 @@ file_new_tab_callback (GtkAction *action,
+   TerminalWindowPrivate *priv = window->priv;
+   TerminalApp *app;
+   TerminalProfile *profile;
++  TerminalScreen *screen;
+   char *new_working_directory;
+ 
+   app = terminal_app_get ();
+@@ -3016,11 +3020,13 @@ file_new_tab_callback (GtkAction *action,
+     return;
+ 
+   new_working_directory = terminal_screen_get_current_dir_with_fallback (priv->active_screen);
+-  terminal_app_new_terminal (app, window, profile,
+-                             NULL, NULL,
+-                             new_working_directory,
+-                             terminal_screen_get_initial_environment (priv->active_screen),
+-                             1.0);
++  screen = terminal_app_new_terminal (app, window, profile,
++                                      NULL, NULL,
++                                      new_working_directory,
++                                      terminal_screen_get_initial_environment (priv->active_screen),
++                                      1.0);
++  terminal_window_switch_screen (window, screen);
++  gtk_widget_grab_focus (GTK_WIDGET (screen));
+   g_free (new_working_directory);
+ }
+ 
+-- 
+1.7.1
+
