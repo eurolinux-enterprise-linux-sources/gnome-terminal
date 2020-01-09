@@ -9,7 +9,7 @@
 Summary: Terminal emulator for GNOME
 Name: gnome-terminal
 Version: 2.31.3
-Release: 4%{?dist}
+Release: 6%{?dist}
 License: GPLv2+ and GFDL
 Group: User Interface/Desktops
 URL: http://www.gnome.org/
@@ -31,6 +31,11 @@ Patch5: gnome-terminal-tab-dnd-fix.patch
 # Translation update
 # https://bugzilla.redhat.com/show_bug.cgi?id=575706
 Patch6: gnome-terminal-2.31.3-translations.patch
+
+# searchable scroll back in gnome-terminal does not work as expected
+# https://bugzilla.redhat.com/show_bug.cgi?id=669113
+Patch7: gnome-terminal-2.33.4-search-regexp.patch
+
 
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
@@ -69,6 +74,7 @@ clickable URLs.
 %patch4 -p1 -R -b .unseal
 %patch5 -p1 -b .tab-dnd-fix
 %patch6 -p2 -b .translations
+%patch7 -p1 -b .search-regexp
 
 %build
 
@@ -85,6 +91,9 @@ cd po
 grep -v ".*[.]desktop[.]in.*\|.*[.]server[.]in$" POTFILES.in > POTFILES.keep
 mv POTFILES.keep POTFILES.in
 intltool-update --pot
+PO_FAKE_DATE="2009-08-03 18:00+0200"   # fake this to be equal in every build
+PO_FAKE_DATE_EXPR='\(.*POT-Creation-Date: *\)\(.*\)\(\\n.*\)'
+sed --in-place "s/${PO_FAKE_DATE_EXPR}/\1${PO_FAKE_DATE}\3/" %{gettext_package}.pot
 for p in *.po; do
   msgmerge $p %{gettext_package}.pot > $p.out
   msgfmt -o `basename $p .po`.gmo $p.out
@@ -149,6 +158,12 @@ scrollkeeper-update -q
 %{_sysconfdir}/gconf/schemas/gnome-terminal.schemas
 
 %changelog
+* Fri Jan 28 2011 Tomas Bzatek <tbzatek@redhat.com> - 2.31.3-6
+- Fix multilib conflicts caused by po files cleanup
+
+* Fri Jan 28 2011 Tomas Bzatek <tbzatek@redhat.com> - 2.31.3-5
+- Fix options functionality in search dialog (#669113)
+
 * Mon Aug  9 2010 Tomas Bzatek <tbzatek@redhat.com> - 2.31.3-4
 - Updated translations (#575706)
 
