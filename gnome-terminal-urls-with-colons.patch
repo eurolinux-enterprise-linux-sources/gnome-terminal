@@ -1,0 +1,31 @@
+From 3e1cc537f86c0fae12d6a764f59c3edb9ce14d1e Mon Sep 17 00:00:00 2001
+From: Tomas Bzatek <tbzatek@redhat.com>
+Date: Thu, 27 Jan 2011 15:20:39 +0100
+Subject: [PATCH] Don't split URL having a column (":") in the middle
+
+Properly handle links like
+http://foo.bar/path/with/a/colon:foo
+
+This patch also avoids selecting trailing colon.
+---
+ src/terminal-screen.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/terminal-screen.c b/src/terminal-screen.c
+index 0a4dff9..e9da242 100644
+--- a/src/terminal-screen.c
++++ b/src/terminal-screen.c
+@@ -150,8 +150,8 @@ static guint signals[LAST_SIGNAL];
+ #define HOSTCHARS_CLASS "[-[:alnum:]]"
+ #define HOST HOSTCHARS_CLASS "+(\\." HOSTCHARS_CLASS "+)*"
+ #define PORT "(?:\\:[[:digit:]]{1,5})?"
+-#define PATHCHARS_CLASS "[-[:alnum:]\\Q_$.+!*,;@&=?/~#%\\E]"
+-#define PATHTERM_CLASS "[^\\Q]'.}>) \t\r\n,\"\\E]"
++#define PATHCHARS_CLASS "[-[:alnum:]\\Q_$.+!*,:;@&=?/~#%\\E]"
++#define PATHTERM_CLASS "[^\\Q]'.:}>) \t\r\n,\"\\E]"
+ #define SCHEME "(?:news:|telnet:|nntp:|file:\\/|https?:|ftps?:|sftp:|webcal:)"
+ #define USERPASS USERCHARS_CLASS "+(?:" PASSCHARS_CLASS "+)?"
+ #define URLPATH   "(?:(/"PATHCHARS_CLASS"+(?:[(]"PATHCHARS_CLASS"*[)])*"PATHCHARS_CLASS"*)*"PATHTERM_CLASS")?"
+-- 
+1.7.3.4
+

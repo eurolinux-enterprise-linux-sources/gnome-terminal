@@ -9,7 +9,7 @@
 Summary: Terminal emulator for GNOME
 Name: gnome-terminal
 Version: 2.31.3
-Release: 6%{?dist}
+Release: 7%{?dist}
 License: GPLv2+ and GFDL
 Group: User Interface/Desktops
 URL: http://www.gnome.org/
@@ -36,6 +36,9 @@ Patch6: gnome-terminal-2.31.3-translations.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=669113
 Patch7: gnome-terminal-2.33.4-search-regexp.patch
 
+# URLs with a colon in them are not interpreted correctly for Open Link
+# https://bugzilla.redhat.com/show_bug.cgi?id=655132
+Patch8: gnome-terminal-urls-with-colons.patch
 
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
@@ -75,6 +78,7 @@ clickable URLs.
 %patch5 -p1 -b .tab-dnd-fix
 %patch6 -p2 -b .translations
 %patch7 -p1 -b .search-regexp
+%patch8 -p1 -b .urls-with-colons
 
 %build
 
@@ -158,6 +162,9 @@ scrollkeeper-update -q
 %{_sysconfdir}/gconf/schemas/gnome-terminal.schemas
 
 %changelog
+* Thu Jul 28 2011 Tomas Bzatek <tbzatek@redhat.com> - 2.31.3-7
+- Fix matching URLs with a colon (#655132)
+
 * Fri Jan 28 2011 Tomas Bzatek <tbzatek@redhat.com> - 2.31.3-6
 - Fix multilib conflicts caused by po files cleanup
 
