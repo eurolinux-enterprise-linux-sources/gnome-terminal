@@ -1,0 +1,394 @@
+diff -urN a/gnome-terminal-2.31.3/po/as.po b/gnome-terminal-2.31.3/po/as.po
+--- a/gnome-terminal-2.31.3/po/as.po	2012-05-10 10:31:33.468832894 +0530
++++ b/gnome-terminal-2.31.3/po/as.po	2012-05-10 10:31:48.063975105 +0530
+@@ -5,19 +5,20 @@
+ # Amitakhya Phukan <aphukan@redhat.com>, 2007.
+ # Amitakhya Phukan <amitakhya@svn.gnome.org>, 2007.
+ # Amitakhya Phukan <aphukan@fedoraproject.org>, 2009, 2010.
++# Nilamdyuti Goswami <ngoswami@redhat.com>, 2011.
+ msgid ""
+ msgstr ""
+ "Project-Id-Version: as\n"
+ "Report-Msgid-Bugs-To: \n"
+ "POT-Creation-Date: 2010-07-15 15:50+0530\n"
+-"PO-Revision-Date: 2010-04-16 12:10+0530\n"
+-"Last-Translator: Amitakhya Phukan <aphukan@fedoraproject.org>\n"
+-"Language-Team: American English <fedora-trans-as@redhat.com>\n"
++"PO-Revision-Date: 2011-04-06 12:58+0000\n"
++"Last-Translator: Nilamdyuti Goswami <ngoswami@redhat.com>\n"
++"Language-Team: American English <kde-i18n-doc@kde.org>\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+ "Content-Transfer-Encoding: 8bit\n"
+ "Plural-Forms: nplurals=2; plural=(n!=1)\n"
+-"X-Generator: Lokalize 0.2\n"
++"X-Generator: Lokalize 1.0\n"
+ 
+ #: ../gnome-terminal.desktop.in.in.h:1 ../src/gnome-terminal.schemas.in.h:130
+ #: ../src/terminal-accels.c:226 ../src/terminal.c:304
+@@ -71,34 +72,32 @@
+ msgstr "মেনুত প্ৰদৰ্শিত এনকোডিং: (_n)"
+ 
+ #: ../src/find-dialog.glade.h:1
+-#, fuzzy
+ msgid "Find"
+-msgstr "হিন্দি"
++msgstr "বিচাৰক"
+ 
+ #: ../src/find-dialog.glade.h:2
+ msgid "Match _entire word only"
+-msgstr ""
++msgstr "কেৱল সমপূৰ্ণ শব্দ মিলাওক (_e)"
+ 
+ #: ../src/find-dialog.glade.h:3
+ msgid "Match as _regular expression"
+-msgstr ""
++msgstr "সাধাৰন এক্সপ্ৰেষন হিচাপে মিলাওক (_r)"
+ 
+ #: ../src/find-dialog.glade.h:4
+ msgid "Search _backwards"
+-msgstr ""
++msgstr "পাছফালে বিচাৰক (_b)"
+ 
+ #: ../src/find-dialog.glade.h:5
+ msgid "_Match case"
+-msgstr ""
++msgstr "ফলা মিলাওক (_M)"
+ 
+ #: ../src/find-dialog.glade.h:6
+ msgid "_Search for:"
+-msgstr ""
++msgstr "বিচাৰক (_S):"
+ 
+ #: ../src/find-dialog.glade.h:7
+-#, fuzzy
+ msgid "_Wrap around"
+-msgstr "স্বচ্চ পটভূমি (_T)"
++msgstr "চাৰিওফালে ঢাকক (_W)"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:1
+ msgid ""
+@@ -293,12 +292,10 @@
+ 
+ #: ../src/gnome-terminal.schemas.in.h:36
+ msgid "If true, allow applications in the terminal to make text boldface."
+-msgstr ""
+-"মান সত্য হ'লে, টাৰ্মিনেলত চলমান অনুপ্ৰয়োগসমূহৰ দ্বাৰা গাঢ় শব্দ প্ৰয়োগ কৰা যাব ।"
++msgstr "মান সত্য হ'লে, টাৰ্মিনেলত চলমান অনুপ্ৰয়োগসমূহৰ দ্বাৰা গাঢ় শব্দ প্ৰয়োগ কৰা যাব ।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:37
+-msgid ""
+-"If true, boldface text will be rendered using the same color as normal text."
++msgid "If true, boldface text will be rendered using the same color as normal text."
+ msgstr "মান true হ'লে, গাঢ় আখৰ আৰু স্বাভাবিক আখৰৰ বাবে একেই ৰং ব্যৱহাৰ কৰা হ'ব ।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:38
+@@ -314,6 +311,9 @@
+ "If true, newly created terminal windows will have custom size specified by "
+ "default_size_columns and default_size_rows."
+ msgstr ""
++"যদি সত্য, নতুনকে সৃষ্টি কৰা টাৰমিনেল উইন্ডোসমূহৰ default_size_columns আৰু "
++"default_size_rows -ৰে "
++"ধাৰ্য্যত স্বনিৰ্বাচিত আকাৰ থাকিব।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:40
+ msgid "If true, pressing a key jumps the scrollbar to the bottom."
+@@ -373,14 +373,11 @@
+ msgid ""
+ "If true, the value of the custom_command setting will be used in place of "
+ "running a shell."
+-msgstr ""
+-"মান সত্য হ'লে, চলমান শ্বেলৰ পৰিবৰ্তে custom_command বৈশিষ্ট্যৰ মান প্ৰয়োগ কৰা হ'ব ।"
++msgstr "মান সত্য হ'লে, চলমান শ্বেলৰ পৰিবৰ্তে custom_command বৈশিষ্ট্যৰ মান প্ৰয়োগ কৰা হ'ব ।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:48
+-msgid ""
+-"If true, whenever there's new output the terminal will scroll to the bottom."
+-msgstr ""
+-"মান সত্য হ'লে, নতুন নিৰ্গম উৎ‌পন্ন হ'লে তলৰ প্ৰান্ত অবধি টাৰ্মিনেল স্ক্ৰোল কৰা হ'ব ।"
++msgid "If true, whenever there's new output the terminal will scroll to the bottom."
++msgstr "মান সত্য হ'লে, নতুন নিৰ্গম উৎ‌পন্ন হ'লে তলৰ প্ৰান্ত অবধি টাৰ্মিনেল স্ক্ৰোল কৰা হ'ব ।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:49
+ msgid ""
+@@ -867,22 +864,24 @@
+ "বিকল্পৰ ফলত মেনু-বাৰৰ প্ৰমিত গতিবৰ্ধকসমূহ নিষ্ক্ৰিয় কৰা হ'ব ।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:115
+-#, fuzzy
+ msgid ""
+ "Number of columns in newly created terminal windows. Has no effect if "
+ "use_custom_default_size is not enabled."
+-msgstr "নবনিৰ্মিত টাৰ্মিনেল উইন্ডোত প্ৰদৰ্শিত স্তম্ভৰ সংখ্যা ।"
++msgstr ""
++"নবনিৰ্মিত টাৰ্মিনেল উইন্ডোত স্তম্ভৰ সংখ্যা। কোনো প্ৰতিক্ৰিয়া নহয় "
++"যদি use_custom_default_size সামৰ্থবান নাথাকে।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:116
+ msgid "Number of lines to keep in scrollback"
+ msgstr "স্ক্ৰোলবেকত উপস্থিত পংক্তিৰ সংখ্যা"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:117
+-#, fuzzy
+ msgid ""
+ "Number of rows in newly created terminal windows. Has no effect if "
+ "use_custom_default_size is not enabled."
+-msgstr "নবনিৰ্মিত টাৰ্মিনেল উইন্ডোত প্ৰদৰ্শিত শাৰীৰ সংখ্যা।"
++msgstr ""
++"নবনিৰ্মিত টাৰ্মিনেল উইন্ডোত শাৰীৰ সংখ্যা। কোনো প্ৰতিক্ৰিয়া নহয় "
++"যদি use_custom_default_size সামৰ্থবান নাথাকে।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:118
+ msgid ""
+@@ -921,8 +920,7 @@
+ "কৰাৰ বাবে ।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:125
+-msgid ""
+-"Profile to be used when opening a new window or tab. Must be in profile_list."
++msgid "Profile to be used when opening a new window or tab. Must be in profile_list."
+ msgstr ""
+ "নতুন সংযোগক্ষেত্ৰ বা টেব খোলাৰ সময় ব্যৱহাৰযোগ্য পাৰ্শ্বৰূপ । নিৰ্বাচিত পাৰ্শ্বৰূপ "
+ "profile_list ত  উপস্থিত থকা আৱশ্যক ।"
+@@ -933,8 +931,7 @@
+ 
+ #: ../src/gnome-terminal.schemas.in.h:127
+ msgid "Run this command in place of the shell, if use_custom_command is true."
+-msgstr ""
+-"use_custom_command বিকল্পৰ মান সত্য হ'লে শ্বেলৰ পৰিবৰ্তে চিহ্নিত আদেশ চলোৱা হ'ব ।"
++msgstr "use_custom_command বিকল্পৰ মান সত্য হ'লে শ্বেলৰ পৰিবৰ্তে চিহ্নিত আদেশ চলোৱা হ'ব ।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:128
+ msgid ""
+@@ -1044,13 +1041,12 @@
+ "সীমা উল্লেখ নকৰাৰ বাবে) উল্লেখ কৰা হ'ব ।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:142
+-#, fuzzy
+ msgid ""
+ "Where to put the terminal scrollbar. Possibilities are \"left\", \"right\", "
+ "and \"hidden\"."
+ msgstr ""
+ "টাৰ্মিনেল স্ক্ৰোলবাৰৰ অৱস্থান । সম্ভাব্য মান হ'ল \"left (বাওঁফালে)\", \"right "
+-"(সোঁফালে)\" আৰু \"disabled (নিষ্ক্ৰিয়)\" ।"
++"(সোঁফালে)\" আৰু \"hidden (লুকাই থোৱা)\"।"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:143
+ msgid "Whether an unlimited number of lines should be kept in scrollback"
+@@ -1131,9 +1127,8 @@
+ msgstr "টাৰ্মিনেলৰ আদেশ আৰম্ভ কৰাৰ সময় প্ৰৱেশ সংক্ৰান্ত তথ্য উন্নত কৰা হ'ব নে নাই"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:160
+-#, fuzzy
+ msgid "Whether to use custom terminal size for new windows"
+-msgstr "নতুন সংযোগক্ষেত্ৰ/টেবত মেনু-বাৰ প্ৰদৰ্শন কৰা হ'ব নে নাই"
++msgstr "নতুন উইন্ডোসমূহৰ কাৰণে স্বনিৰ্বাচিত টাৰমিনেল আকাৰ ব্যৱহাৰ কৰা হব নে"
+ 
+ #: ../src/gnome-terminal.schemas.in.h:161
+ msgid "Whether to use the colors from the theme for the terminal widget"
+@@ -1163,8 +1158,7 @@
+ 
+ #: ../src/keybinding-editor.glade.h:3
+ msgid "_Enable menu access keys (such as Alt+F to open the File menu)"
+-msgstr ""
+-"সমস্ত মেনু অভিগম চাবি (উদাহৰণ, নথিপত্ৰ নামক মেনুৰ বাবে Alt+f) সক্ৰিয় কৰা হ'ব (_E)"
++msgstr "সমস্ত মেনু অভিগম চাবি (উদাহৰণ, নথিপত্ৰ নামক মেনুৰ বাবে Alt+f) সক্ৰিয় কৰা হ'ব (_E)"
+ 
+ #: ../src/keybinding-editor.glade.h:4
+ msgid "_Shortcut keys:"
+@@ -1243,9 +1237,8 @@
+ msgstr "<b>আদেশ</b>"
+ 
+ #: ../src/profile-preferences.glade.h:2
+-#, fuzzy
+ msgid "<b>Foreground, Background, Bold and Underline</b>"
+-msgstr "<b>অগ্ৰভূমি, পটভূমি আৰু গাঢ়</b>"
++msgstr "<b>অগ্ৰভূমি, পটভূমি, ডাঠ আৰু নিম্নশাৰীত</b>"
+ 
+ #: ../src/profile-preferences.glade.h:3
+ msgid "<b>Palette</b>"
+@@ -1284,7 +1277,6 @@
+ msgstr "<small><i>শূণ্য</i></small>"
+ 
+ #: ../src/profile-preferences.glade.h:9
+-#, fuzzy
+ msgid ""
+ "Automatic\n"
+ "Control-H\n"
+@@ -1292,10 +1284,11 @@
+ "Escape sequence\n"
+ "TTY Erase"
+ msgstr ""
+-"Automatic\n"
+-"Control-H\n"
++"স্বচালিত\n"
++"নিয়ন্ত্ৰণ-H\n"
+ "ASCII DEL\n"
+-"Escape sequence"
++"পলায়ন ক্ৰম\n"
++"TTY মচা"
+ 
+ #: ../src/profile-preferences.glade.h:14
+ msgid "Background"
+@@ -1365,9 +1358,8 @@
+ msgstr "স্বনিৰ্বাচিত আদেশ: (_m)"
+ 
+ #: ../src/profile-preferences.glade.h:31
+-#, fuzzy
+ msgid "Default size:"
+-msgstr "অবিকল্পিত মাপ: (_z)"
++msgstr "অবিকল্পিত আকাৰ:"
+ 
+ #: ../src/profile-preferences.glade.h:32
+ msgid ""
+@@ -1477,7 +1469,7 @@
+ 
+ #: ../src/profile-preferences.glade.h:62
+ msgid "Use custom default terminal si_ze"
+-msgstr ""
++msgstr "স্বনিৰ্বাচিত অবিকল্পিত টাৰমিনেল আকাৰ ব্যৱহাৰ কৰক (_z)"
+ 
+ #: ../src/profile-preferences.glade.h:63
+ msgid "When command _exits:"
+@@ -1544,9 +1536,8 @@
+ msgstr "স্বচ্চ পটভূমি (_T)"
+ 
+ #: ../src/profile-preferences.glade.h:79
+-#, fuzzy
+ msgid "_Underline color:"
+-msgstr "ৰেখা"
++msgstr "নিম্নশাৰীত ৰঙ (_U):"
+ 
+ #: ../src/profile-preferences.glade.h:80
+ msgid "_Unlimited"
+@@ -2029,8 +2020,7 @@
+ msgid ""
+ "Option \"%s\" requires specifying the command to run on the rest of the "
+ "command line"
+-msgstr ""
+-"অবশিষ্ট আদেশ-লাইনত চলোৱাৰ বাবে বিকল্প \"%s\" ৰ ক্ষেত্ৰত আদেশ উল্লেখ কৰা আৱশ্যক"
++msgstr "অবশিষ্ট আদেশ-লাইনত চলোৱাৰ বাবে বিকল্প \"%s\" ৰ ক্ষেত্ৰত আদেশ উল্লেখ কৰা আৱশ্যক"
+ 
+ #: ../src/terminal-options.c:807
+ msgid "Not a valid terminal config file."
+@@ -2081,10 +2071,8 @@
+ msgstr "সংযোগক্ষেত্ৰক সম্পূৰ্ণ পৰ্দ্দাত দেখুৱাওক"
+ 
+ #: ../src/terminal-options.c:1037
+-msgid ""
+-"Set the window size; for example: 80x24, or 80x24+200+200 (ROWSxCOLS+X+Y)"
+-msgstr ""
+-"উইন্ডোৰ মাপ ধাৰ্য কৰক; উদাহৰণস্বৰূপ: 80x24, or 80x24+200+200 (ROWSxCOLS+X+Y)"
++msgid "Set the window size; for example: 80x24, or 80x24+200+200 (ROWSxCOLS+X+Y)"
++msgstr "উইন্ডোৰ মাপ ধাৰ্য কৰক; উদাহৰণস্বৰূপ: 80x24, or 80x24+200+200 (ROWSxCOLS+X+Y)"
+ 
+ #: ../src/terminal-options.c:1038
+ msgid "GEOMETRY"
+@@ -2150,8 +2138,7 @@
+ msgid ""
+ "Options to open new windows or terminal tabs; more than one of these may be "
+ "specified:"
+-msgstr ""
+-"নতুন সংযোগক্ষেত্ৰ বা টাৰ্মিনেল টেব খোলাৰ বিকল্পসমূহ; ইয়াৰ একাধিক নিৰ্ধাৰণ কৰিব পাৰি:"
++msgstr "নতুন সংযোগক্ষেত্ৰ বা টাৰ্মিনেল টেব খোলাৰ বিকল্পসমূহ; ইয়াৰ একাধিক নিৰ্ধাৰণ কৰিব পাৰি:"
+ 
+ #: ../src/terminal-options.c:1370
+ msgid "Show terminal options"
+@@ -2186,13 +2173,12 @@
+ msgstr "নামবিহীন"
+ 
+ #: ../src/terminal-screen.c:1496
+-#, fuzzy
+ msgid "_Profile Preferences"
+-msgstr "পাৰ্শ্বৰূপৰ পছন্দ (_o)"
++msgstr "পাৰ্শ্বৰূপৰ পছন্দসমূহ (_P)"
+ 
+ #: ../src/terminal-screen.c:1497 ../src/terminal-screen.c:1889
+ msgid "_Relaunch"
+-msgstr ""
++msgstr "পুনৰ উন্মোচন কৰক (_R)"
+ 
+ #: ../src/terminal-screen.c:1500 ../src/terminal-screen.c:1513
+ msgid "There was an error creating the child process for this terminal"
+@@ -2201,16 +2187,16 @@
+ #: ../src/terminal-screen.c:1893
+ #, c-format
+ msgid "The child process exited normally with status %d."
+-msgstr ""
++msgstr "সন্তান প্ৰক্ৰিয়া অৱস্থা %d -ৰ সৈতে সাধাৰনভাৱে প্ৰস্থান কৰিছে।"
+ 
+ #: ../src/terminal-screen.c:1896
+ #, c-format
+ msgid "The child process was terminated by signal %d."
+-msgstr ""
++msgstr "সন্তান প্ৰক্ৰিয়াটো %d সংকেত দ্বাৰা অন্ত কৰা হৈছিল।"
+ 
+ #: ../src/terminal-screen.c:1899
+ msgid "The child process was terminated."
+-msgstr ""
++msgstr "সন্তান প্ৰক্ৰিয়াটো অন্ত কৰা হৈছিল।"
+ 
+ #: ../src/terminal-tab-label.c:151
+ msgid "Close tab"
+@@ -2307,7 +2293,7 @@
+ 
+ #: ../src/terminal-window.c:1743
+ msgid "_Search"
+-msgstr ""
++msgstr "সন্ধান কৰক (_S)"
+ 
+ #: ../src/terminal-window.c:1744
+ msgid "_Terminal"
+@@ -2356,27 +2342,27 @@
+ #. Search menu
+ #: ../src/terminal-window.c:1805
+ msgid "_Find..."
+-msgstr ""
++msgstr "বিচাৰক (_F)..."
+ 
+ #: ../src/terminal-window.c:1808
+ msgid "Find Ne_xt"
+-msgstr ""
++msgstr "পৰৱৰ্তী বিচাৰক (_x)"
+ 
+ #: ../src/terminal-window.c:1811
+ msgid "Find Pre_vious"
+-msgstr ""
++msgstr "পুৰ্বৱৰ্তী বিচাৰক (_v)"
+ 
+ #: ../src/terminal-window.c:1814
+ msgid "_Clear Highlight"
+-msgstr ""
++msgstr "উজ্জ্বলকৰণ আতৰাওক (_C)"
+ 
+ #: ../src/terminal-window.c:1818
+ msgid "Go to _Line..."
+-msgstr ""
++msgstr "শাৰীলে যাওক (_L)..."
+ 
+ #: ../src/terminal-window.c:1821
+ msgid "_Incremental Search..."
+-msgstr ""
++msgstr "বৃদ্ধিত সন্ধান (_I)..."
+ 
+ #. Terminal menu
+ #: ../src/terminal-window.c:1827
+@@ -2504,8 +2490,7 @@
+ msgid ""
+ "There is still a process running in this terminal. Closing the terminal will "
+ "kill it."
+-msgstr ""
+-"এই টাৰ্মিনেলত এতিয়াও এটা প্ৰক্ৰিয়া চলি আছে । টাৰ্মিনেল বন্ধ কৰিলে তাক মৰা হ'ব ।"
++msgstr "এই টাৰ্মিনেলত এতিয়াও এটা প্ৰক্ৰিয়া চলি আছে । টাৰ্মিনেল বন্ধ কৰিলে তাক মৰা হ'ব ।"
+ 
+ #: ../src/terminal-window.c:3114
+ msgid "C_lose Terminal"
+@@ -2578,7 +2563,7 @@
+ #. Translators: This refers to the Delete keybinding option
+ #: ../src/extra-strings.c:32
+ msgid "TTY Erase"
+-msgstr ""
++msgstr "TTY মচা"
+ 
+ #. Translators: Cursor shape: ...
+ #: ../src/extra-strings.c:35
