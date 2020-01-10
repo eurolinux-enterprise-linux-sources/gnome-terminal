@@ -2,13 +2,13 @@
 
 %define glib2_version 2.40.0
 %define gtk3_version 3.10.0
-%define vte_version 0.38.4-2
+%define vte_version 0.38.0
 %define desktop_file_utils_version 0.2.90
 
 Summary: Terminal emulator for GNOME
 Name: gnome-terminal
 Version: 3.14.3
-Release: 13%{?dist}
+Release: 3%{?dist}
 License: GPLv3+ and GFDL
 Group: User Interface/Desktops
 URL: http://www.gnome.org/
@@ -24,23 +24,6 @@ Patch2: 0001-RHEL-doesn-t-have-appdata-tools.patch
 
 # https://bugzilla.gnome.org/show_bug.cgi?id=730128
 Patch3: 0001-window-Pass-tab-switching-keys-to-the-terminal-for-t.patch
-
-Patch4: gnome-terminal-3.14.3-EL7.3_translations.patch
-
-# https://bugzilla.redhat.com/show_bug.cgi?id=1323217
-Patch5: 0001-Revert-server-Error-out-on-unsupported-locale.patch
-
-# https://bugzilla.redhat.com/show_bug.cgi?id=1251885
-Patch6: accel-translations.patch
-
-# https://bugzilla.redhat.com/show_bug.cgi?id=1103380
-Patch7: gnome-terminal-scroll-speed.patch
-
-# https://bugzilla.redhat.com/show_bug.cgi?id=1300826
-Patch8: 0001-Restore-separate-menuitems-for-opening-tabs-and-wind.patch
-
-# https://bugzilla.redhat.com/show_bug.cgi?id=1296110
-Patch9: gnome-terminal-title-options.patch
 
 BuildRequires: glib2-devel >= %{glib2_version}
 BuildRequires: GConf2-devel
@@ -76,9 +59,6 @@ multiple terminals in a single window (tabs) and profiles support.
 Summary: GNOME Terminal extension for Nautilus
 Requires: %{name}%{?_isa} = %{version}-%{release}
 
-Provides: nautilus-gnome-terminal = %{version}-%{release}
-Obsoletes: nautilus-open-terminal < 0.20-4
-
 %description nautilus
 This package provides a Nautilus extension that adds the 'Open in Terminal'
 option to the right-click context menu in Nautilus.
@@ -89,12 +69,6 @@ option to the right-click context menu in Nautilus.
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
-%patch4 -p1
-%patch5 -p1
-%patch6 -p1
-%patch7 -p1
-%patch8 -p1
-%patch9 -p1
 
 %build
 autoreconf --force --install
@@ -136,46 +110,6 @@ fi
 %{_libdir}/nautilus/extensions-3.0/libterminal-nautilus.so
 
 %changelog
-* Fri Jul 22 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-13
-- Fix the Obsoletes to replace nautilus-open-terminal
-- Resolves: #1341615
-
-* Thu Jun 30 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-12
-- Restore the rest of the title handling options and make it all work
-- Resolves: #1296110
-
-* Fri Jun 10 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-11
-- Revert the "New Terminal" entry in the application menu
-- Resolves: #1300826
-
-* Wed Jun 01 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-10
-- Add Provides/Obsoletes to replace nautilus-open-terminal
-- Resolves: #1341615
-
-* Tue May 17 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-9
-- Restore separate menuitems for opening tabs and windows
-- Resolves: #1300826
-
-* Fri May 13 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-8
-- Add a property to configure the scroll speed
-- Resolves: #1103380
-
-* Mon Apr 11 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-7
-- Restore the --title option
-- Resolves: #1296110
-
-* Fri Apr  8 2016 Matthias Clasen <mclasen@redhat.com> - 3.14.3-6
-- Remove accels from some translations
-  Resolves: #1251885
-
-* Tue Apr  5 2016 Ray Strode <rstrode@redhat.com> - 3.14.3-5
-- Allow old ISO 8895 charsets for backward compatibility
-  Resolves: #1323217
-
-* Tue Apr  5 2016 Matthias Clasen <mclasen@redhat.com> - 3.14.3-4
-- Update translations
-- Resolves: #1272392
-
 * Mon Oct  5 2015 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-3
 - Pass tab switching keys to the terminal for tabless windows
 - Resolves: #1268255
