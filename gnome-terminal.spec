@@ -8,7 +8,7 @@
 Summary: Terminal emulator for GNOME
 Name: gnome-terminal
 Version: 3.14.3
-Release: 3%{?dist}
+Release: 3%{?dist}.1
 License: GPLv3+ and GFDL
 Group: User Interface/Desktops
 URL: http://www.gnome.org/
@@ -24,6 +24,9 @@ Patch2: 0001-RHEL-doesn-t-have-appdata-tools.patch
 
 # https://bugzilla.gnome.org/show_bug.cgi?id=730128
 Patch3: 0001-window-Pass-tab-switching-keys-to-the-terminal-for-t.patch
+
+# https://bugzilla.redhat.com/show_bug.cgi?id=1324761
+Patch4: 0001-Revert-server-Error-out-on-unsupported-locale.patch
 
 BuildRequires: glib2-devel >= %{glib2_version}
 BuildRequires: GConf2-devel
@@ -69,6 +72,7 @@ option to the right-click context menu in Nautilus.
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
+%patch4 -p1
 
 %build
 autoreconf --force --install
@@ -110,6 +114,10 @@ fi
 %{_libdir}/nautilus/extensions-3.0/libterminal-nautilus.so
 
 %changelog
+* Mon Apr  5 2016 Ray Strode <rstrode@redhat.com> - 3.14.3-3.1
+- Allow old ISO 8895 charsets for backward compatibility
+  Resolves: #1324761
+
 * Mon Oct  5 2015 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-3
 - Pass tab switching keys to the terminal for tabless windows
 - Resolves: #1268255
