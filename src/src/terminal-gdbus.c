@@ -368,18 +368,21 @@ terminal_factory_impl_create_instance (TerminalFactory *factory,
   TerminalObjectSkeleton *skeleton;
   char *object_path;
   GSettings *profile = NULL;
-  const char *profile_uuid;
+  const char *profile_uuid, *title, *encoding;
   gboolean zoom_set = FALSE;
   gdouble zoom = 1.0;
   guint window_id;
   gboolean show_menubar;
-  gboolean active = TRUE;
+  gboolean active;
   gboolean have_new_window, present_window, present_window_set;
   GError *err = NULL;
 
   /* Look up the profile */
   if (!g_variant_lookup (options, "profile", "&s", &profile_uuid))
     profile_uuid = NULL;
+
+  if (!g_variant_lookup (options, "encoding", "&s", &encoding))
+    encoding = NULL; /* use profile encoding */
 
   profiles_list = terminal_app_get_profiles_list (app);
   profile = terminal_profiles_list_ref_profile_by_uuid (profiles_list, profile_uuid, &err);
@@ -456,14 +459,14 @@ terminal_factory_impl_create_instance (TerminalFactory *factory,
 
   g_assert (window != NULL);
 
+  if (!g_variant_lookup (options, "title", "&s", &title))
+    title = NULL;
   if (g_variant_lookup (options, "zoom", "d", &zoom))
     zoom_set = TRUE;
 
-  screen = terminal_screen_new (profile, NULL, NULL, NULL,
+  screen = terminal_screen_new (profile, encoding, NULL, title, NULL, NULL,
                                 zoom_set ? zoom : 1.0);
   terminal_window_add_screen (window, screen, -1);
-  terminal_window_switch_screen (window, screen);
-  gtk_widget_grab_focus (GTK_WIDGET (screen));
 
   object_path = get_object_path_for_screen (window, screen);
   g_assert (g_variant_is_object_path (object_path));
@@ -480,8 +483,11 @@ terminal_factory_impl_create_instance (TerminalFactory *factory,
   g_signal_connect (screen, "destroy",
                     G_CALLBACK (screen_destroy_cb), app);
 
-  if (active)
+  if (g_variant_lookup (options, "active", "b", &active) &&
+      active) {
     terminal_window_switch_screen (window, screen);
+    gtk_widget_grab_focus (GTK_WIDGET (screen));
+  }
 
   if (g_variant_lookup (options, "present-window", "b", &present_window))
     present_window_set = TRUE;

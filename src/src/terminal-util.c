@@ -26,6 +26,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <langinfo.h>
 #include <errno.h>
 
 #include <glib.h>
@@ -159,7 +160,7 @@ terminal_util_show_about (GtkWindow *transient_parent)
     "Copyright © 2002–2004 Havoc Pennington\n"
     "Copyright © 2003–2004, 2007 Mariano Suárez-Alvarez\n"
     "Copyright © 2006 Guilherme de S. Pastore\n"
-    "Copyright © 2007–2013 Christian Persch";
+    "Copyright © 2007–2016 Christian Persch";
   char *licence_text;
   GKeyFile *key_file;
   GBytes *bytes;
@@ -169,8 +170,10 @@ terminal_util_show_about (GtkWindow *transient_parent)
   char **authors, **contributors, **artists, **documenters, **array_strv;
   gsize n_authors = 0, n_contributors = 0, n_artists = 0, n_documenters = 0 , i;
   GPtrArray *array;
+  gs_free char *comment;
+  gs_free char *vte_version;
 
-  bytes = g_resources_lookup_data (TERMINAL_RESOURCES_PATH_PREFIX "ui/terminal.about", 
+  bytes = g_resources_lookup_data (TERMINAL_RESOURCES_PATH_PREFIX "/ui/terminal.about",
                                    G_RESOURCE_LOOKUP_FLAGS_NONE,
                                    &error);
   g_assert_no_error (error);
@@ -202,7 +205,7 @@ terminal_util_show_about (GtkWindow *transient_parent)
       g_ptr_array_add (array, EMAILIFY (contributors[i]));
   }
   g_free (contributors); /* strings are now owned by the array */
-  
+
   g_ptr_array_add (array, NULL);
   array_strv = (char **) g_ptr_array_free (array, FALSE);
 
@@ -213,10 +216,20 @@ terminal_util_show_about (GtkWindow *transient_parent)
 
   licence_text = terminal_util_get_licence_text ();
 
+  vte_version = g_strdup_printf (_("Using VTE version %u.%u.%u"),
+                                 vte_get_major_version (),
+                                 vte_get_minor_version (),
+                                 vte_get_micro_version ());
+
+  comment = g_strdup_printf("%s\n%s %s",
+                            _("A terminal emulator for the GNOME desktop"),
+                            vte_version,
+                            vte_get_features ());
+
   gtk_show_about_dialog (transient_parent,
                          "program-name", _("GNOME Terminal"),
                          "copyright", copyright,
-                         "comments", _("A terminal emulator for the GNOME desktop"),
+                         "comments", comment,
                          "version", VERSION,
                          "authors", array_strv,
                          "artists", artists,
@@ -266,7 +279,7 @@ terminal_util_set_atk_name_description (GtkWidget  *widget,
 void
 terminal_util_open_url (GtkWidget *parent,
                         const char *orig_url,
-                        TerminalURLFlavour flavor,
+                        TerminalURLFlavor flavor,
                         guint32 user_time)
 {
   gs_free_error GError *error = NULL;
@@ -418,10 +431,20 @@ terminal_util_load_builder_resource (const char *path,
 
   if (main_object_name) {
     GObject *main_object;
+    GtkWidget *action_area;
 
     main_object = gtk_builder_get_object (builder, main_object_name);
     g_object_set_data_full (main_object, "builder", g_object_ref (builder), (GDestroyNotify) g_object_unref);
     g_signal_connect (main_object, "destroy", G_CALLBACK (main_object_destroy_cb), NULL);
+
+    /* Fixup dialogue padding, #735242 */
+    if (GTK_IS_DIALOG (main_object) &&
+        (action_area = (GtkWidget *) gtk_builder_get_object (builder, "dialog-action-area"))) {
+      gtk_widget_set_margin_left   (action_area, 5);
+      gtk_widget_set_margin_right  (action_area, 5);
+      gtk_widget_set_margin_top    (action_area, 5);
+      gtk_widget_set_margin_bottom (action_area, 5);
+    }
   }
 }
 
@@ -696,6 +719,64 @@ terminal_util_get_screen_by_display_name (const char *display_name,
   return screen;
 }
 
+/**
+ * terminal_util_get_etc_shells:
+ *
+ * Returns: (transfer full) the contents of /etc/shells
+ */
+char **
+terminal_util_get_etc_shells (void)
+{
+  GError *err = NULL;
+  gsize len;
+  gs_free char *contents = NULL;
+  char *str, *nl, *end;
+  GPtrArray *arr;
+
+  if (!g_file_get_contents ("/etc/shells", &contents, &len, &err) || len == 0)
+    return NULL;
+
+  arr = g_ptr_array_new ();
+  str = contents;
+  end = contents + len;
+  while (str < end && (nl = strchr (str, '\n')) != NULL) {
+    if (str != nl) /* non-empty? */
+      g_ptr_array_add (arr, g_strndup (str, nl - str));
+    str = nl + 1;
+  }
+  /* Anything non-empty left? */
+  if (str < end && str[0])
+    g_ptr_array_add (arr, g_strdup (str));
+
+  g_ptr_array_add (arr, NULL);
+  return (char **) g_ptr_array_free (arr, FALSE);
+}
+
+/**
+ * terminal_util_get_is_shell:
+ * @command: a string
+ *
+ * Returns wether @command is a valid shell as defined by the contents of /etc/shells.
+ *
+ * Returns: whether @command is a shell
+ */
+gboolean
+terminal_util_get_is_shell (const char *command)
+{
+  gs_strfreev char **shells;
+  guint i;
+
+  shells = terminal_util_get_etc_shells ();
+  if (shells == NULL)
+    return FALSE;
+
+  for (i = 0; shells[i]; i++)
+    if (g_str_equal (command, shells[i]))
+      return TRUE;
+
+  return FALSE;
+}
+
 static gboolean
 s_to_rgba (GVariant *variant,
            gpointer *result,
@@ -714,8 +795,49 @@ s_to_rgba (GVariant *variant,
   if (!gdk_rgba_parse (color, str))
     return FALSE;
 
+  color->alpha = 1.0;
   *result = color;
   return TRUE;
+}
+
+/**
+ * terminal_g_settings_new:
+ * @schema_id: a settings schema ID
+ * @mandatory_key: the name of a key that must exist in the schema
+ * @mandatory_key_type: the expected value type of @mandatory_key
+ *
+ * Creates a #GSettings for @schema_id, if this schema exists and
+ * has a key named @mandatory_key (if non-%NULL) with the value type
+ * @mandatory_key_type.
+ *
+ * Returns: (transfer full): a new #GSettings, or %NULL
+ */
+GSettings *
+terminal_g_settings_new (const char *schema_id,
+                         const char *mandatory_key,
+                         const GVariantType *mandatory_key_type)
+{
+  gs_unref_settings_schema GSettingsSchema *schema;
+
+  schema = g_settings_schema_source_lookup (g_settings_schema_source_get_default (),
+                                            schema_id,
+                                            TRUE);
+  if (schema == NULL)
+    return NULL;
+
+  if (mandatory_key) {
+    gs_unref_settings_schema_key GSettingsSchemaKey *key;
+
+    key = g_settings_schema_get_key (schema, mandatory_key);
+    if (key == NULL)
+      return NULL;
+
+    if (!g_variant_type_equal (g_settings_schema_key_get_value_type (key),
+                               mandatory_key_type))
+      return NULL;
+  }
+
+  return g_settings_new_full (schema, NULL, NULL);
 }
 
 /**
@@ -870,4 +992,115 @@ terminal_util_bind_mnemonic_label_sensitivity (GtkWidget *widget)
     gtk_container_foreach (GTK_CONTAINER (widget),
                            (GtkCallback) terminal_util_bind_mnemonic_label_sensitivity,
                            NULL);
+}
+
+/*
+ * "1234567", "'", 3 -> "1'234'567"
+ */
+static char *
+add_separators (const char *in, const char *sep, int groupby)
+{
+  int inlen, outlen, seplen, firstgrouplen;
+  char *out, *ret;
+
+  if (in[0] == '\0')
+    return g_strdup("");
+
+  inlen = strlen(in);
+  seplen = strlen(sep);
+  outlen = inlen + (inlen - 1) / groupby * seplen;
+  ret = out = g_malloc(outlen + 1);
+
+  firstgrouplen = (inlen - 1) % groupby + 1;
+  strncpy(out, in, firstgrouplen);
+  in += firstgrouplen;
+  out += firstgrouplen;
+
+  while (*in != '\0') {
+    strncpy(out, sep, seplen);
+    out += seplen;
+    strncpy(out, in, groupby);
+    in += groupby;
+    out += groupby;
+  }
+
+  g_assert(out - ret == outlen);
+  *out = '\0';
+  return ret;
+}
+
+/**
+ * terminal_util_number_info:
+ * @str: a dec or hex number as string
+ *
+ * Returns: (transfer full): Useful info about @str, or %NULL if it's too large
+ */
+char *
+terminal_util_number_info (const char *str)
+{
+  gs_free char *decstr = NULL;
+  gs_free char *hextmp = NULL;
+  gs_free char *hexstr = NULL;
+  gs_free char *magnitudestr = NULL;
+  unsigned long long num;
+  gboolean exact = TRUE;
+  gboolean hex = FALSE;
+  const char *thousep;
+
+  errno = 0;
+  /* Deliberately not handle octal */
+  if (str[1] == 'x' || str[1] == 'X') {
+    num = strtoull(str + 2, NULL, 16);
+    hex = TRUE;
+  } else {
+    num = strtoull(str, NULL, 10);
+  }
+  if (errno) {
+    return NULL;
+  }
+
+  /* No use in dec-hex conversion for so small numbers */
+  if (num < 10) {
+    return NULL;
+  }
+
+  /* Group the decimal digits */
+  thousep = nl_langinfo(THOUSEP);
+  if (thousep[0] != '\0') {
+    /* If thousep is nonempty, use printf's magic which can handle
+       more complex separating logics, e.g. 2+2+2+3 for some locales */
+    decstr = g_strdup_printf("%'llu", num);
+  } else {
+    /* If, however, thousep is empty, override it with a space so that we
+       do always group the digits (that's the whole point of this feature;
+       the choice of space guarantees not conflicting with the decimal separator) */
+    gs_free char *tmp = g_strdup_printf("%llu", num);
+    thousep = " ";
+    decstr = add_separators(tmp, thousep, 3);
+  }
+
+  /* Group the hex digits by 4 using the same nonempty separator */
+  hextmp = g_strdup_printf("%llx", num);
+  hexstr = add_separators(hextmp, thousep, 4);
+
+  /* Find out the human-readable magnitude, e.g. 15.99 Mi */
+  if (num >= 1024) {
+    int power = 0;
+    while (num >= 1024 * 1024) {
+      power++;
+      if (num % 1024 != 0)
+        exact = FALSE;
+      num /= 1024;
+    }
+    /* Show 2 fraction digits, always rounding downwards. Printf rounds floats to the nearest representable value,
+       so do the calculation with integers until we get 100-fold the desired value, and then switch to float. */
+    if (100 * num % 1024 != 0)
+      exact = FALSE;
+    num = 100 * num / 1024;
+    magnitudestr = g_strdup_printf(" %s %.2f %ci", exact ? "=" : "≈", (double) num / 100, "KMGTPE"[power]);
+  } else {
+    magnitudestr = g_strdup("");
+  }
+
+  return g_strdup_printf(hex ? "0x%2$s = %1$s%3$s" : "%s = 0x%s%s", decstr, hexstr, magnitudestr);
 }

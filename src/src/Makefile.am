@@ -6,6 +6,8 @@ bin_PROGRAMS = gnome-terminal
 libexec_PROGRAMS = gnome-terminal-server
 noinst_PROGRAMS =
 
+check_PROGRAMS = terminal-regex
+
 if WITH_NAUTILUS_EXTENSION
 nautilusextension_LTLIBRARIES = libterminal-nautilus.la
 endif # WITH_NAUTILUS_EXTENSION
@@ -13,6 +15,11 @@ endif # WITH_NAUTILUS_EXTENSION
 # Terminal server
 
 dbusservice_DATA = org.gnome.Terminal.service
+
+# It is correct for this to be in ${prefix}/lib, even on systems where that
+# does not match ${libdir}. This is what systemd uses on such platforms.
+systemduserdir = $(prefix)/lib/systemd/user
+nodist_systemduser_DATA = gnome-terminal-server.service
 
 gnome_terminal_server_built = \
 	terminal-marshal.c \
@@ -36,8 +43,6 @@ gnome_terminal_server_SOURCES = \
 	terminal-accels.h \
 	terminal-app.c \
 	terminal-app.h \
-	terminal-close-button.h \
-	terminal-close-button.c \
 	terminal-debug.c \
 	terminal-debug.h \
 	terminal-defines.h \
@@ -46,6 +51,8 @@ gnome_terminal_server_SOURCES = \
 	terminal-encoding.h \
 	terminal-gdbus.c \
 	terminal-gdbus.h \
+	terminal-icon-button.h \
+	terminal-icon-button.c \
 	terminal-info-bar.c \
 	terminal-info-bar.h \
 	terminal-intl.h \
@@ -56,10 +63,12 @@ gnome_terminal_server_SOURCES = \
 	terminal-mdi-container.h \
 	terminal-notebook.c \
 	terminal-notebook.h \
+	terminal-pcre2.h \
 	terminal-prefs.c \
 	terminal-prefs.h \
 	terminal-profiles-list.c \
 	terminal-profiles-list.h \
+	terminal-regex.h \
 	terminal-schemas.h \
 	terminal-settings-list.c \
 	terminal-settings-list.h \
@@ -67,8 +76,8 @@ gnome_terminal_server_SOURCES = \
 	terminal-screen.h \
 	terminal-screen-container.c \
 	terminal-screen-container.h \
-	terminal-search-dialog.c \
-	terminal-search-dialog.h \
+	terminal-search-popover.c \
+	terminal-search-popover.h \
 	terminal-tab-label.c \
 	terminal-tab-label.h \
 	terminal-tabs-menu.c \
@@ -136,7 +145,17 @@ terminal-marshal.c: $(srcdir)/terminal-marshal.list
 org.gnome.Terminal.service: Makefile
 	$(AM_V_GEN) ( echo "[D-BUS Service]"; \
 		      echo "Name=org.gnome.Terminal"; \
+		      echo "SystemdService=gnome-terminal-server.service"; \
 		      echo "Exec=${libexecdir}/gnome-terminal-server") > $@
+
+gnome-terminal-server.service: Makefile
+	$(AM_V_GEN) ( echo "[Unit]"; \
+		      echo "Description=GNOME Terminal Server"; \
+		      echo "[Service]"; \
+		      echo "KillMode=process"; \
+		      echo "Type=dbus"; \
+		      echo "BusName=org.gnome.Terminal"; \
+		      echo "ExecStart=${libexecdir}/gnome-terminal-server") > $@
 
 terminal-gdbus-generated.c terminal-gdbus-generated.h: org.gnome.Terminal.xml Makefile
 	$(AM_V_GEN) $(GDBUS_CODEGEN) \
@@ -148,6 +167,30 @@ terminal-gdbus-generated.c terminal-gdbus-generated.h: org.gnome.Terminal.xml Ma
 
 terminal-resources.h terminal-resources.c: terminal.gresource.xml Makefile $(shell $(GLIB_COMPILE_RESOURCES) --generate-dependencies --sourcedir $(srcdir) $(srcdir)/terminal.gresource.xml)
 	$(AM_V_GEN) XMLLINT=$(XMLLINT) $(GLIB_COMPILE_RESOURCES) --target $@ --sourcedir $(srcdir) --generate --c-name terminal $<
+
+# Checks
+
+TESTS = \
+	terminal-regex \
+	$(NULL)
+
+# Check programmes
+
+terminal_regex_CPPFLAGS = \
+	$(AM_CPPFLAGS)
+terminal_regex_SOURCES = \
+	terminal-regex.c \
+	terminal-regex.h \
+	$(NULL)
+terminal_regex_CFLAGS = \
+	-DTERMINAL_REGEX_MAIN \
+	$(TERM_CFLAGS) \
+	$(WARN_CFLAGS) \
+	$(AM_CFLAGS)
+terminal_regex_LDFLAGS = \
+	$(AM_LDFLAGS)
+terminal_regex_LDADD = \
+	$(TERM_LIBS)
 
 # Terminal client
 
@@ -192,11 +235,12 @@ gterminal_CPPFLAGS = \
 	-DLOCALEDIR="\"$(datadir)/locale\"" \
 	-DGETTEXT_PACKAGE=\"$(GETTEXT_PACKAGE)\" \
 	$(AM_CPPFLAGS)
+
 # See bug #710862 about -Wsuggest-attribute=format
 gterminal_CFLAGS = \
+	--include config.h \
 	$(GTERMINAL_CFLAGS) \
 	$(AM_CFLAGS) \
-	$(WARN_CFLAGS) \
 	-Wno-cast-qual \
 	-Wno-format-nonliteral \
 	-Wno-suggest-attribute=format \
@@ -367,12 +411,13 @@ CLEANFILES = \
 	gnome-terminal.schemas \
 	stamp-terminal-type-builtins.h \
 	org.gnome.Terminal.service \
+	gnome-terminal-server.service \
 	$(BUILT_SOURCES)
 
 EXTRA_DIST = \
 	terminal.about \
 	terminal.xml \
-	terminal-appmenu.ui \
+	terminal-menus.ui \
 	terminal-window.ui \
 	terminal.gresource.xml \
 	terminal-marshal.list \
@@ -380,9 +425,10 @@ EXTRA_DIST = \
 	terminal-type-builtins.h.template \
 	org.gnome.Terminal.xml \
 	nautilus.symbols \
-	find-dialog.ui \
+	search-popover.ui \
 	preferences.ui \
 	profile-preferences.ui \
+	terminal.common.css \
 	$(about_DATA) \
 	$(uimanager_DATA) \
 	$(builder_DATA) \

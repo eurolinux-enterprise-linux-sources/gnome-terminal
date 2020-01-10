@@ -57,16 +57,16 @@ typedef struct {
 static GtkWidget *prefs_dialog = NULL;
 
 static void
-prefs_dialog_response_cb (GtkWidget *editor,
-                          int response,
-                          PrefData *data)
+prefs_dialog_help_button_clicked_cb (GtkWidget *button,
+                                     PrefData *data)
 {
-  if (response == GTK_RESPONSE_HELP)
-    {
-      terminal_util_show_help ("pref", GTK_WINDOW (data->dialog));
-      return;
-    }
+  terminal_util_show_help ("pref", GTK_WINDOW (data->dialog));
+}
 
+static void
+prefs_dialog_close_button_clicked_cb (GtkWidget *button,
+                                      PrefData *data)
+{
   gtk_widget_destroy (data->dialog);
 }
 
@@ -300,8 +300,7 @@ profile_list_row_activated_cb (GtkTreeView *tree_view,
   if (selected_profile == NULL)
     return;
 
-  terminal_app_edit_profile (terminal_app_get (),
-                             selected_profile, GTK_WINDOW (data->dialog), NULL);
+  terminal_app_edit_profile (terminal_app_get (), selected_profile, NULL, NULL);
 }
 
 static GtkTreeView *
@@ -426,8 +425,7 @@ profile_list_edit_button_clicked_cb (GtkWidget *button,
   if (selected_profile == NULL)
     return;
 
-  terminal_app_edit_profile (terminal_app_get (), selected_profile,
-                             GTK_WINDOW (data->dialog), NULL);
+  terminal_app_edit_profile (terminal_app_get (), selected_profile, NULL, NULL);
 }
 
 static void
@@ -562,8 +560,9 @@ terminal_prefs_show_preferences (GtkWindow *transient_parent,
   GtkWidget *show_menubar_button, *disable_mnemonics_button, *disable_menu_accel_button;
   GtkWidget *disable_shortcuts_button;
   GtkWidget *tree_view_container, *new_button, *edit_button, *clone_button, *remove_button;
-  GtkWidget *dark_theme_button, *new_terminal_mode_combo;
+  GtkWidget *theme_variant_label, *theme_variant_combo, *new_terminal_mode_combo;
   GtkWidget *default_hbox, *default_label;
+  GtkWidget *close_button, *help_button;
   GtkTreeSelection *selection;
   GSettings *settings;
   GtkCellRenderer *cell_renderer;
@@ -582,8 +581,11 @@ terminal_prefs_show_preferences (GtkWindow *transient_parent,
   terminal_util_load_builder_resource ("/org/gnome/terminal/ui/preferences.ui",
                                        "preferences-dialog",
                                        "preferences-dialog", &dialog,
+                                       "close-button", &close_button,
+                                       "help-button", &help_button,
                                        "default-show-menubar-checkbutton", &show_menubar_button,
-                                       "dark-theme-checkbutton", &dark_theme_button,
+                                       "theme-variant-label", &theme_variant_label,
+                                       "theme-variant-combobox", &theme_variant_combo,
                                        "new-terminal-mode-combobox", &new_terminal_mode_combo,
                                        "disable-mnemonics-checkbutton", &disable_mnemonics_button,
                                        "disable-shortcuts-checkbutton", &disable_shortcuts_button,
@@ -601,6 +603,8 @@ terminal_prefs_show_preferences (GtkWindow *transient_parent,
 
   data->dialog = dialog;
 
+  gtk_window_set_application (GTK_WINDOW (data->dialog), GTK_APPLICATION (terminal_app_get ()));
+
   terminal_util_bind_mnemonic_label_sensitivity (dialog);
 
   settings = terminal_app_get_global_settings (app);
@@ -613,11 +617,16 @@ terminal_prefs_show_preferences (GtkWindow *transient_parent,
                    "active",
                    G_SETTINGS_BIND_GET | G_SETTINGS_BIND_SET);
 
+#if GTK_CHECK_VERSION (3, 19, 0)
   g_settings_bind (settings,
-                   TERMINAL_SETTING_DARK_THEME_KEY,
-                   dark_theme_button,
-                   "active",
+                   TERMINAL_SETTING_THEME_VARIANT_KEY,
+                   theme_variant_combo,
+                   "active-id",
                    G_SETTINGS_BIND_GET | G_SETTINGS_BIND_SET);
+#else
+  gtk_widget_set_visible (theme_variant_label, FALSE);
+  gtk_widget_set_visible (theme_variant_combo, FALSE);
+#endif /* GTK+ 3.19 */
 
   g_settings_bind (settings,
                    TERMINAL_SETTING_NEW_TERMINAL_MODE_KEY,
@@ -754,7 +763,8 @@ terminal_prefs_show_preferences (GtkWindow *transient_parent,
 
   /* misc */
 
-  g_signal_connect (dialog, "response", G_CALLBACK (prefs_dialog_response_cb), data);
+  g_signal_connect (close_button, "clicked", G_CALLBACK (prefs_dialog_close_button_clicked_cb), data);
+  g_signal_connect (help_button, "clicked", G_CALLBACK (prefs_dialog_help_button_clicked_cb), data);
   g_signal_connect (dialog, "destroy", G_CALLBACK (prefs_dialog_destroy_cb), data);
   gtk_window_set_default_size (GTK_WINDOW (dialog), -1, 350);
 

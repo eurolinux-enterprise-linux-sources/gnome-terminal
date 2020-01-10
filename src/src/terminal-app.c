@@ -3,7 +3,7 @@
  * Copyright © 2002 Red Hat, Inc.
  * Copyright © 2002 Sun Microsystems
  * Copyright © 2003 Mariano Suarez-Alvarez
- * Copyright © 2008, 2010, 2011 Christian Persch
+ * Copyright © 2008, 2010, 2011, 2015 Christian Persch
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -56,6 +56,12 @@
 
 #define SYSTEM_PROXY_SETTINGS_SCHEMA            "org.gnome.system.proxy"
 
+#define GTK_SETTING_PREFER_DARK_THEME           "gtk-application-prefer-dark-theme"
+
+#define GTK_DEBUG_SETTING_SCHEMA                "org.gtk.Settings.Debug"
+#define GTK_DEBUG_ENABLE_INSPECTOR_KEY          "enable-inspector-keybinding"
+#define GTK_DEBUG_ENABLE_INSPECTOR_TYPE         G_VARIANT_TYPE_BOOLEAN
+
 /*
  * Session state is stored entirely in the RestartCommand command line.
  *
@@ -87,6 +93,7 @@ struct _TerminalApp
   GSettings *global_settings;
   GSettings *desktop_interface_settings;
   GSettings *system_proxy_settings;
+  GSettings *gtk_debug_settings;
 
 #ifdef ENABLE_SEARCH_PROVIDER
   TerminalSearchProvider *search_provider;
@@ -122,7 +129,7 @@ maybe_migrate_settings (TerminalApp *app)
   version = g_settings_get_uint (terminal_app_get_global_settings (app), TERMINAL_SETTING_SCHEMA_VERSION);
   if (version >= TERMINAL_SCHEMA_VERSION) {
      _terminal_debug_print (TERMINAL_DEBUG_SERVER | TERMINAL_DEBUG_PROFILE,
-                            "Schema version is %d, already migrated.\n", version);
+                            "Schema version is %u, already migrated.\n", version);
     return;
   }
 
@@ -150,6 +157,60 @@ maybe_migrate_settings (TerminalApp *app)
                        TERMINAL_SETTING_SCHEMA_VERSION,
                        TERMINAL_SCHEMA_VERSION);
 #endif /* ENABLE_MIGRATION */
+}
+
+static gboolean
+load_css_from_resource (GApplication *application,
+                        GtkCssProvider *provider,
+                        gboolean theme)
+{
+  const char *base_path;
+  gs_free char *uri;
+  gs_unref_object GFile *file;
+  gs_free_error GError *error = NULL;
+
+  base_path = g_application_get_resource_base_path (application);
+
+  if (theme) {
+    gs_free char *str, *theme_name;
+
+    g_object_get (gtk_settings_get_default (), "gtk-theme-name", &str, NULL);
+    theme_name = g_ascii_strdown (str, -1);
+    uri = g_strdup_printf ("resource://%s/css/%s/terminal.css", base_path, theme_name);
+  } else {
+    uri = g_strdup_printf ("resource://%s/css/terminal.css", base_path);
+  }
+
+  file = g_file_new_for_uri (uri);
+  if (!g_file_query_exists (file, NULL /* cancellable */))
+    return FALSE;
+
+  if (!gtk_css_provider_load_from_file (provider, file, &error))
+    g_assert_no_error (error);
+
+  return TRUE;
+}
+
+static void
+add_css_provider (GApplication *application,
+                  gboolean theme)
+{
+  gs_unref_object GtkCssProvider *provider;
+
+  provider = gtk_css_provider_new ();
+  if (!load_css_from_resource (application, provider, theme))
+    return;
+
+  gtk_style_context_add_provider_for_screen (gdk_screen_get_default (),
+                                             GTK_STYLE_PROVIDER (provider),
+                                             GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+
+static void
+app_load_css (GApplication *application)
+{
+  add_css_provider (application, FALSE);
+  add_css_provider (application, TRUE);
 }
 
 void
@@ -251,6 +312,25 @@ terminal_app_encoding_list_notify_cb (GSettings   *settings,
   g_signal_emit (app, signals[ENCODING_LIST_CHANGED], 0);
 }
 
+#if GTK_CHECK_VERSION (3, 19, 0)
+static void
+terminal_app_theme_variant_changed_cb (GSettings   *settings,
+                                       const char  *key,
+                                       GtkSettings *gtk_settings)
+{
+  TerminalThemeVariant theme;
+
+  theme = g_settings_get_enum (settings, key);
+  if (theme == TERMINAL_THEME_VARIANT_SYSTEM)
+    gtk_settings_reset_property (gtk_settings, GTK_SETTING_PREFER_DARK_THEME);
+  else
+    g_object_set (gtk_settings,
+                  GTK_SETTING_PREFER_DARK_THEME,
+                  theme == TERMINAL_THEME_VARIANT_DARK,
+                  NULL);
+}
+#endif /* GTK+ 3.19 */
+
 /* App menu callbacks */
 
 static void
@@ -259,13 +339,8 @@ app_menu_preferences_cb (GSimpleAction *action,
                          gpointer       user_data)
 {
   TerminalApp *app = user_data;
-  GtkWindow *window;
 
-  window = gtk_application_get_active_window (GTK_APPLICATION (app));
-  if (!TERMINAL_IS_WINDOW (window))
-    return;
-
-  terminal_app_edit_preferences (app, window);
+  terminal_app_edit_preferences (app, NULL);
 }
 
 static void
@@ -321,8 +396,7 @@ terminal_app_startup (GApplication *application)
     { "quit",        app_menu_quit_cb,          NULL, NULL, NULL }
   };
 
-  gs_unref_object GtkBuilder *builder;
-  GError *error = NULL;
+  g_application_set_resource_base_path (application, TERMINAL_RESOURCES_PATH_PREFIX);
 
   G_APPLICATION_CLASS (terminal_app_parent_class)->startup (application);
 
@@ -333,14 +407,8 @@ terminal_app_startup (GApplication *application)
                                    app_menu_actions, G_N_ELEMENTS (app_menu_actions),
                                    application);
 
-  builder = gtk_builder_new ();
-  gtk_builder_add_from_resource (builder,
-                                 TERMINAL_RESOURCES_PATH_PREFIX "ui/terminal-appmenu.ui",
-                                 &error);
-  g_assert_no_error (error);
 
-  gtk_application_set_app_menu (GTK_APPLICATION (application),
-                                G_MENU_MODEL (gtk_builder_get_object (builder, "appmenu")));
+  app_load_css (application);
 
   _terminal_debug_print (TERMINAL_DEBUG_SERVER, "Startup complete\n");
 }
@@ -362,10 +430,25 @@ terminal_app_init (TerminalApp *app)
 
   /* Terminal global settings */
   app->global_settings = g_settings_new (TERMINAL_SETTING_SCHEMA);
-  g_settings_bind (app->global_settings, TERMINAL_SETTING_DARK_THEME_KEY,
-                   gtk_settings_get_default (),
-                   "gtk-application-prefer-dark-theme",
-                   G_SETTINGS_BIND_GET);
+
+  /* Gtk debug settings */
+  app->gtk_debug_settings = terminal_g_settings_new (GTK_DEBUG_SETTING_SCHEMA,
+                                                     GTK_DEBUG_ENABLE_INSPECTOR_KEY,
+                                                     GTK_DEBUG_ENABLE_INSPECTOR_TYPE);
+
+#if GTK_CHECK_VERSION (3, 19, 0)
+  {
+  GtkSettings *gtk_settings;
+
+  gtk_settings = gtk_settings_get_default ();
+  terminal_app_theme_variant_changed_cb (app->global_settings,
+                                         TERMINAL_SETTING_THEME_VARIANT_KEY, gtk_settings);
+  g_signal_connect (app->global_settings,
+                    "changed::" TERMINAL_SETTING_THEME_VARIANT_KEY,
+                    G_CALLBACK (terminal_app_theme_variant_changed_cb),
+                    gtk_settings);
+  }
+#endif /* GTK+ 3.19 */
 
   /* Check if we need to migrate from gconf to dconf */
   maybe_migrate_settings (app);
@@ -385,16 +468,6 @@ terminal_app_init (TerminalApp *app)
 
   settings = g_settings_get_child (app->global_settings, "keybindings");
   terminal_accels_init (G_APPLICATION (app), settings);
-
-#if 1
-{
-  /* Legacy gtkuimanager menu accelerator */
-  /* Disallow in-place menu accel changes. Only needed on gtk 3.8,
-   * it's unused and ignored from 3.10 onward. */
-  TERMINAL_UTIL_OBJECT_TYPE_UNDEPRECATE_PROPERTY (GTK_TYPE_SETTINGS, "gtk-can-change-accels");
-  g_object_set (gtk_settings_get_default (), "gtk-can-change-accels", FALSE, NULL);
-}
-#endif
 }
 
 static void
@@ -411,6 +484,7 @@ terminal_app_finalize (GObject *object)
   g_object_unref (app->global_settings);
   g_object_unref (app->desktop_interface_settings);
   g_object_unref (app->system_proxy_settings);
+  g_clear_object (&app->gtk_debug_settings);
 
   terminal_accels_shutdown ();
 
@@ -541,7 +615,9 @@ TerminalScreen *
 terminal_app_new_terminal (TerminalApp     *app,
                            TerminalWindow  *window,
                            GSettings       *profile,
+                           const char      *encoding,
                            char           **override_command,
+                           const char      *title,
                            const char      *working_dir,
                            char           **child_env,
                            double           zoom)
@@ -551,7 +627,7 @@ terminal_app_new_terminal (TerminalApp     *app,
   g_return_val_if_fail (TERMINAL_IS_APP (app), NULL);
   g_return_val_if_fail (TERMINAL_IS_WINDOW (window), NULL);
 
-  screen = terminal_screen_new (profile, override_command,
+  screen = terminal_screen_new (profile, encoding, override_command, title,
                                 working_dir, child_env, zoom);
 
   terminal_window_add_screen (window, screen, -1);
@@ -745,6 +821,12 @@ GSettings *
 terminal_app_get_proxy_settings (TerminalApp *app)
 {
   return app->system_proxy_settings;
+}
+
+GSettings *
+terminal_app_get_gtk_debug_settings (TerminalApp *app)
+{
+  return app->gtk_debug_settings;
 }
 
 /**

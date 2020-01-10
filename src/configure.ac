@@ -1,6 +1,6 @@
 m4_define([gt_version_major],[3])
-m4_define([gt_version_minor],[14])
-m4_define([gt_version_micro],[3])
+m4_define([gt_version_minor],[22])
+m4_define([gt_version_micro],[1])
 m4_define([gt_version_extra],[])
 m4_define([gt_version],[gt_version_major().gt_version_minor().gt_version_micro()gt_version_extra])
 
@@ -25,6 +25,7 @@ fi
 AM_MAINTAINER_MODE([enable])
 
 PKG_PROG_PKG_CONFIG
+AC_PROG_MKDIR_P
 AC_PROG_CC
 AC_ISC_POSIX
 AC_HEADER_STDC
@@ -33,10 +34,14 @@ IT_PROG_INTLTOOL([0.50.0])
 
 AM_GLIB_GNU_GETTEXT
 
-GLIB_REQUIRED=2.40.0
+GLIB_REQUIRED=2.42.0
+GLIB_MIN_REQUIRED=2.42
+GLIB_MAX_ALLOWED=2.42
+
 GIO_REQUIRED=2.34.0
 GSETTINGS_DESKTOP_SCHEMAS_REQUIRED=0.1.0
 DCONF_REQUIRED=0.14.0
+PCRE2_REQUIRED=10.00
 
 AC_MSG_CHECKING([which gtk+ version to compile against])
 AC_ARG_WITH([gtk],
@@ -51,11 +56,15 @@ AC_MSG_RESULT([$with_gtk])
 
 case "$with_gtk" in
   3.0) GTK_API_VERSION=3.0
-       GTK_REQUIRED=3.10.0
+       GTK_REQUIRED=3.12.0
+       GTK_MIN_REQUIRED=3.8
+       GTK_MAX_ALLOWED=3.20
        VTE_API_VERSION=2.91
-       VTE_REQUIRED=0.38.0
+       VTE_REQUIRED=0.46.1
        ;;
 esac
+
+#
 
 PLATFORM_DEPS=
 for target in $($PKG_CONFIG --variable targets gdk-$GTK_API_VERSION); do
@@ -68,6 +77,8 @@ for target in $($PKG_CONFIG --variable targets gdk-$GTK_API_VERSION); do
   esac
 done
 
+# pkg-config checks
+
 PKG_CHECK_MODULES([TERM],
   [vte-$VTE_API_VERSION >= $VTE_REQUIRED
    glib-2.0 >= $GLIB_REQUIRED
@@ -76,6 +87,7 @@ PKG_CHECK_MODULES([TERM],
    gsettings-desktop-schemas >= $GSETTINGS_DESKTOP_SCHEMAS_REQUIRED
    dconf >= $DCONF_REQUIRED
    uuid
+   libpcre2-8 >= $PCRE2_REQUIRED
    $PLATFORM_DEPS])
 
 # ****
@@ -88,7 +100,7 @@ AC_ARG_ENABLE([gterminal],[AS_HELP_STRING([--disable-gterminal],[Disable gtermin
 AC_MSG_RESULT([$enable_gterminal])
 
 AS_IF([test "$enable_gterminal" = "yes"],[
-  AM_PROG_VALAC([0.24])
+  AM_PROG_VALAC([0.26])
 
   VALA_CHECK_PACKAGES([glib-2.0 gio-2.0 gio-unix-2.0 linux posix])
   PKG_CHECK_MODULES([GTERMINAL],
@@ -154,45 +166,51 @@ AM_CONDITIONAL([ENABLE_MIGRATION],[test "$enable_migration" = "yes"])
 # ***********
 
 AC_ARG_VAR([GLIB_GENMARSHAL],[the glib-genmarschal programme])
-AC_PATH_PROG([GLIB_GENMARSHAL],[glib-genmarshal],[])
 if test -z "$GLIB_GENMARSHAL"; then
-  AC_MSG_ERROR([glib-genmarshal not found])
+  AC_PATH_PROG([GLIB_GENMARSHAL],[glib-genmarshal],[])
+  if test -z "$GLIB_GENMARSHAL"; then
+    AC_MSG_ERROR([glib-genmarshal not found])
+  fi
 fi
 
 AC_ARG_VAR([GLIB_MKENUMS],[the glib-mkenums programme])
-AC_PATH_PROG([GLIB_MKENUMS],[glib-mkenums],[])
 if test -z "$GLIB_MKENUMS"; then
-  AC_MSG_ERROR([glib-mkenums not found])
+  AC_PATH_PROG([GLIB_MKENUMS],[glib-mkenums],[])
+  if test -z "$GLIB_MKENUMS"; then
+    AC_MSG_ERROR([glib-mkenums not found])
+  fi
 fi
 
 AC_ARG_VAR([GLIB_COMPILE_RESOURCES],[the glib-compile-resources programme])
-AC_PATH_PROG([GLIB_COMPILE_RESOURCES],[glib-compile-resources],[])
 if test -z "$GLIB_COMPILE_RESOURCES"; then
-  AC_MSG_ERROR([glib-compile-resources not found])
+  AC_PATH_PROG([GLIB_COMPILE_RESOURCES],[glib-compile-resources],[])
+  if test -z "$GLIB_COMPILE_RESOURCES"; then
+    AC_MSG_ERROR([glib-compile-resources not found])
+  fi
 fi
 
 AC_ARG_VAR([GDBUS_CODEGEN],[the gdbus-codegen programme])
-AC_PATH_PROG([GDBUS_CODEGEN],[gdbus-codegen],[])
 if test -z "$GDBUS_CODEGEN"; then
-  AC_MSG_ERROR([gdbus-codegen not found])
+  AC_PATH_PROG([GDBUS_CODEGEN],[gdbus-codegen],[])
+  if test -z "$GDBUS_CODEGEN"; then
+    AC_MSG_ERROR([gdbus-codegen not found])
+  fi
 fi
 
 AC_ARG_VAR([XMLLINT],[the xmllint programme])
-AC_PATH_PROG([XMLLINT],[xmllint],[])
 if test -z "$XMLLINT"; then
-  AC_MSG_ERROR([xmllint not found])
+  AC_PATH_PROG([XMLLINT],[xmllint],[])
+  if test -z "$XMLLINT"; then
+    AC_MSG_ERROR([xmllint not found])
+  fi
 fi
 
 AC_ARG_VAR([DESKTOP_FILE_VALIDATE],[the desktop-file-validate programme])
-AC_PATH_PROG([DESKTOP_FILE_VALIDATE],[desktop-file-validate],[])
 if test -z "$DESKTOP_FILE_VALIDATE"; then
-  AC_MSG_ERROR([desktop-file-validate not found])
-fi
-
-AC_ARG_VAR([APPDATA_VALIDATE],[the appdata-validate programme])
-AC_PATH_PROG([APPDATA_VALIDATE],[appdata-validate],[])
-if test -z "$APPDATA_VALIDATE"; then
-  AC_MSG_ERROR([appdata-validate not found])
+  AC_PATH_PROG([DESKTOP_FILE_VALIDATE],[desktop-file-validate],[])
+  if test -z "$DESKTOP_FILE_VALIDATE"; then
+    AC_MSG_ERROR([desktop-file-validate not found])
+  fi
 fi
 
 # ***************************
@@ -246,7 +264,7 @@ AM_CONDITIONAL([WITH_NAUTILUS_EXTENSION],[test "$with_nautilus_extension" = "yes
 # **********************
 
 if test -f /etc/os-release; then
-  DISTRO="$(source /etc/os-release && echo $ID)"
+  DISTRO="$(. /etc/os-release && echo $ID)"
 else
   DISTRO="unknown"
 fi
@@ -305,13 +323,13 @@ CC_CHECK_FLAGS_APPEND([WARN_CFLAGS],[CFLAGS],[ \
   -Wuninitialized \
   -Wunsafe-loop-optimizations \
   -Wwrite-strings \
+  -Wformat-signedness \
   -fno-common \
   -fdiagnostics-show-option \
   -fno-strict-aliasing \
   -fvisibility=hidden \
   -fstack-protector \
-  -fstack-protector-strong\
-  -Wno-deprecated-declarations \
+  -fstack-protector-strong \
 ])
 
 # *********
@@ -345,12 +363,16 @@ AC_SUBST([WARN_CFLAGS])
 AC_SUBST([AM_CPPFLAGS])
 AC_SUBST([AM_CFLAGS])
 AC_SUBST([AM_LDFLAGS])
+AC_DEFINE_UNQUOTED([GLIB_VERSION_MIN_REQUIRED],[G_ENCODE_VERSION(${GLIB_MIN_REQUIRED/./,})],[Define the min required glib version])
+AC_DEFINE_UNQUOTED([GLIB_VERSION_MAX_ALLOWED],[G_ENCODE_VERSION(${GLIB_MAX_ALLOWED/./,})],[Define the max allowed glib version])
+AC_DEFINE_UNQUOTED([GDK_VERSION_MIN_REQUIRED],[G_ENCODE_VERSION(${GTK_MIN_REQUIRED/./,})],[Define the min required gtk version])
+AC_DEFINE_UNQUOTED([GDK_VERSION_MAX_ALLOWED],[G_ENCODE_VERSION(${GTK_MAX_ALLOWED/./,})],[Define the max allowed gtk version])
 
 # ****************************
 
 AC_CONFIG_FILES([
 Makefile
-gnome-terminal.desktop.in
+org.gnome.Terminal.desktop.in
 src/Makefile
 src/terminal-version.h
 help/Makefile

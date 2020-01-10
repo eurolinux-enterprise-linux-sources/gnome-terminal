@@ -67,6 +67,7 @@ typedef struct
   char    *startup_id;
   char    *display_name;
   int      screen_number;
+  gboolean show_preferences;
   GList   *initial_windows;
   gboolean default_window_menubar_forced;
   gboolean default_window_menubar_state;
@@ -75,6 +76,7 @@ typedef struct
   char    *default_role;
   char    *default_geometry;
   char    *default_working_dir;
+  char    *default_title;
   char   **exec_argv;
   char    *default_profile;
   gboolean default_profile_is_id;
@@ -94,6 +96,7 @@ typedef struct
   char *profile;
   gboolean profile_is_id;
   char **exec_argv;
+  char *title;
   char *working_dir;
   double zoom;
   guint zoom_set : 1;

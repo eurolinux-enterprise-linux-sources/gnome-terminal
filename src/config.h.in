@@ -15,8 +15,20 @@
 /* Define to enable gnome-shell search provider */
 #undef ENABLE_SEARCH_PROVIDER
 
+/* Define the max allowed gtk version */
+#undef GDK_VERSION_MAX_ALLOWED
+
+/* Define the min required gtk version */
+#undef GDK_VERSION_MIN_REQUIRED
+
 /* Gettext package */
 #undef GETTEXT_PACKAGE
+
+/* Define the max allowed glib version */
+#undef GLIB_VERSION_MAX_ALLOWED
+
+/* Define the min required glib version */
+#undef GLIB_VERSION_MIN_REQUIRED
 
 /* Define to 1 if you have the `bind_textdomain_codeset' function. */
 #undef HAVE_BIND_TEXTDOMAIN_CODESET
@@ -66,8 +78,7 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
-/* Define to the sub-directory in which libtool stores uninstalled libraries.
-   */
+/* Define to the sub-directory where libtool stores uninstalled libraries. */
 #undef LT_OBJDIR
 
 /* Name of package */

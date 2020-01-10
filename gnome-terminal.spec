@@ -1,32 +1,33 @@
 %define gettext_package gnome-terminal
 
 %define glib2_version 2.40.0
-%define gtk3_version 3.10.0
-%define vte_version 0.38.0
+%define gtk3_version 3.20.0
+%define vte_version 0.46.0
 %define desktop_file_utils_version 0.2.90
 
 Summary: Terminal emulator for GNOME
 Name: gnome-terminal
-Version: 3.14.3
-Release: 3%{?dist}.1
+Version: 3.22.1
+Release: 2%{?dist}
 License: GPLv3+ and GFDL
 Group: User Interface/Desktops
 URL: http://www.gnome.org/
 #VCS: git:git://git.gnome.org/gnome-terminal
-Source0: http://download.gnome.org/sources/gnome-terminal/3.14/gnome-terminal-%{version}.tar.xz
+Source0: http://download.gnome.org/sources/gnome-terminal/3.22/gnome-terminal-%{version}.tar.xz
 
-Patch0: 0001-Restore-transparency-gnome-3-14.patch
+Patch0:  0001-Update-Polish-translation.patch
+Patch1:  0001-search-provider-Fix-incorrect-assumption.patch
 
-# https://bugzilla.gnome.org/show_bug.cgi?id=745958
-Patch1: 0001-Make-the-ActiveTerminal-field-in-the-config-file-for.patch
+Patch100: %{name}-notify-open-title-transparency.patch
 
-Patch2: 0001-RHEL-doesn-t-have-appdata-tools.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1323217
+Patch101: %{name}-Revert-server-Error-out-on-unsupported-locale.patch
 
-# https://bugzilla.gnome.org/show_bug.cgi?id=730128
-Patch3: 0001-window-Pass-tab-switching-keys-to-the-terminal-for-t.patch
+Patch102: %{name}-scroll-speed.patch
+Patch103: %{name}-don-t-treat-warnings-as-errors.patch
 
-# https://bugzilla.redhat.com/show_bug.cgi?id=1324761
-Patch4: 0001-Revert-server-Error-out-on-unsupported-locale.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1379605
+Patch104: %{name}-Update-Japanese-translations-for-RHEL.patch
 
 BuildRequires: glib2-devel >= %{glib2_version}
 BuildRequires: GConf2-devel
@@ -43,10 +44,9 @@ BuildRequires: dconf-devel
 BuildRequires: libuuid-devel
 BuildRequires: nautilus-devel
 BuildRequires: gnome-shell
-BuildRequires: vala
+BuildRequires: pcre2-devel
+BuildRequires: systemd
 BuildRequires: vala-devel
-BuildRequires: vala-tools
-BuildRequires: yelp-tools
 
 Requires: dbus-x11
 Requires: glib2%{?_isa} >= %{glib2_version}
@@ -62,6 +62,9 @@ multiple terminals in a single window (tabs) and profiles support.
 Summary: GNOME Terminal extension for Nautilus
 Requires: %{name}%{?_isa} = %{version}-%{release}
 
+Provides: nautilus-gnome-terminal = %{version}-%{release}
+Obsoletes: nautilus-open-terminal < 0.20-4
+
 %description nautilus
 This package provides a Nautilus extension that adds the 'Open in Terminal'
 option to the right-click context menu in Nautilus.
@@ -70,25 +73,27 @@ option to the right-click context menu in Nautilus.
 %setup -q
 %patch0 -p1
 %patch1 -p1
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
+%patch100 -p1
+%patch101 -p1
+%patch102 -p1
+%patch103 -p1
+%patch104 -p1
 
 %build
 autoreconf --force --install
-%configure --disable-static --with-gtk=3.0 --with-nautilus-extension
+%configure --disable-static --disable-gterminal --with-gtk=3.0 --with-nautilus-extension
 
 make %{?_smp_mflags}
 
 %install
-make install DESTDIR=$RPM_BUILD_ROOT
+%make_install
 
 rm -f $RPM_BUILD_ROOT%{_libdir}/nautilus/extensions-3.0/*.la
 
 %find_lang %{gettext_package} --with-gnome
 
 %check
-desktop-file-validate $RPM_BUILD_ROOT%{_datadir}/applications/gnome-terminal.desktop
+desktop-file-validate $RPM_BUILD_ROOT%{_datadir}/applications/org.gnome.Terminal.desktop
 
 %postun
 if [ $1 -eq 0 ] ; then
@@ -99,24 +104,73 @@ fi
 /usr/bin/glib-compile-schemas %{_datadir}/glib-2.0/schemas &> /dev/null || :
 
 %files -f %{gettext_package}.lang
-%doc AUTHORS COPYING NEWS
+%license COPYING
+%doc AUTHORS NEWS
 
 %{_bindir}/gnome-terminal
-%{_datadir}/appdata/gnome-terminal.appdata.xml
-%{_datadir}/applications/gnome-terminal.desktop
+%{_datadir}/appdata/org.gnome.Terminal.appdata.xml
+%{_datadir}/applications/org.gnome.Terminal.desktop
 %{_libexecdir}/gnome-terminal-migration
 %{_libexecdir}/gnome-terminal-server
 %{_datadir}/dbus-1/services/org.gnome.Terminal.service
 %{_datadir}/glib-2.0/schemas/org.gnome.Terminal.gschema.xml
 %{_datadir}/gnome-shell
+%{_userunitdir}/gnome-terminal-server.service
 
 %files nautilus
 %{_libdir}/nautilus/extensions-3.0/libterminal-nautilus.so
+%{_datadir}/appdata/org.gnome.Terminal.Nautilus.metainfo.xml
 
 %changelog
-* Mon Apr  5 2016 Ray Strode <rstrode@redhat.com> - 3.14.3-3.1
+* Thu May 25 2017 Debarshi Ray <rishi@fedoraproject.org> - 3.22.1-2
+- Update Japanese translations for RHEL
+- Resolves: #1379605
+
+* Tue Feb 28 2017 Debarshi Ray <rishi@fedoraproject.org> - 3.22.1-1
+- Update to 3.22.1
+- Drop upstreamed patches
+- Rebase downstream patches
+- Resolves: #1386964
+
+* Fri Jul 22 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-13
+- Fix the Obsoletes to replace nautilus-open-terminal
+- Resolves: #1341615
+
+* Thu Jun 30 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-12
+- Restore the rest of the title handling options and make it all work
+- Resolves: #1296110
+
+* Fri Jun 10 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-11
+- Revert the "New Terminal" entry in the application menu
+- Resolves: #1300826
+
+* Wed Jun 01 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-10
+- Add Provides/Obsoletes to replace nautilus-open-terminal
+- Resolves: #1341615
+
+* Tue May 17 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-9
+- Restore separate menuitems for opening tabs and windows
+- Resolves: #1300826
+
+* Fri May 13 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-8
+- Add a property to configure the scroll speed
+- Resolves: #1103380
+
+* Mon Apr 11 2016 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-7
+- Restore the --title option
+- Resolves: #1296110
+
+* Fri Apr  8 2016 Matthias Clasen <mclasen@redhat.com> - 3.14.3-6
+- Remove accels from some translations
+  Resolves: #1251885
+
+* Tue Apr  5 2016 Ray Strode <rstrode@redhat.com> - 3.14.3-5
 - Allow old ISO 8895 charsets for backward compatibility
-  Resolves: #1324761
+  Resolves: #1323217
+
+* Tue Apr  5 2016 Matthias Clasen <mclasen@redhat.com> - 3.14.3-4
+- Update translations
+- Resolves: #1272392
 
 * Mon Oct  5 2015 Debarshi Ray <rishi@fedoraproject.org> - 3.14.3-3
 - Pass tab switching keys to the terminal for tabless windows

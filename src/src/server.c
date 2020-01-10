@@ -40,8 +40,11 @@
 #include "terminal-gdbus.h"
 #include "terminal-i18n.h"
 #include "terminal-defines.h"
+#include "terminal-libgsystem.h"
 
 static char *app_id = NULL;
+
+#define INACTIVITY_TIMEOUT (100 /* ms */)
 
 static gboolean
 option_app_id_cb (const gchar *option_name,
@@ -97,16 +100,10 @@ increase_rlimit_nofile (void)
   return TRUE;
 }
 
-enum {
-  _EXIT_FAILURE_WRONG_ID = 7,
-  _EXIT_FAILURE_NO_UTF8 = 8,
-};
-
 int
 main (int argc, char **argv)
 {
-  GApplication *app;
-  int exit_code = EXIT_FAILURE;
+  gs_unref_object GApplication *app = NULL;
   const char *home_dir, *charset;
   GError *error = NULL;
 
@@ -118,7 +115,10 @@ main (int argc, char **argv)
     return _EXIT_FAILURE_WRONG_ID;
   }
 
-  setlocale (LC_ALL, "");
+  if (setlocale (LC_ALL, "") == NULL) {
+    g_printerr ("Locale not supported.\n");
+    return _EXIT_FAILURE_UNSUPPORTED_LOCALE;
+  }
 
   terminal_i18n_init (TRUE);
 
@@ -129,6 +129,10 @@ main (int argc, char **argv)
 
   /* Sanitise environment */
   g_unsetenv ("DBUS_STARTER_BUS_TYPE");
+
+  /* Not interested in silly debug spew polluting the journal, bug #749195 */
+  if (g_getenv ("G_ENABLE_DIAGNOSTIC") == NULL)
+    g_setenv ("G_ENABLE_DIAGNOSTIC", "0", TRUE);
 
 #ifndef ENABLE_DISTRO_PACKAGING
 #ifdef HAVE_UBUNTU
@@ -159,7 +163,7 @@ main (int argc, char **argv)
   if (!gtk_init_with_args (&argc, &argv, NULL, options, NULL, &error)) {
     g_printerr ("Failed to parse arguments: %s\n", error->message);
     g_error_free (error);
-    exit (EXIT_FAILURE);
+    exit (_EXIT_FAILURE_GTK_INIT);
   }
 
   if (!increase_rlimit_nofile ()) {
@@ -170,22 +174,8 @@ main (int argc, char **argv)
   app = terminal_app_new (app_id);
   g_free (app_id);
 
-  if (!g_application_register (app, NULL, &error)) {
-    g_printerr ("Failed to register application: %s\n", error->message);
-    g_error_free (error);
-    goto out;
-  }
+  /* We stay around a bit after the last window closed */
+  g_application_set_inactivity_timeout (app, INACTIVITY_TIMEOUT);
 
-  if (g_application_get_is_remote (app)) {
-    /* How the fuck did this happen? */
-    g_printerr ("Cannot be remote instance!\n");
-    goto out;
-  }
-
-  exit_code = g_application_run (app, 0, NULL);
-
-out:
-  g_object_unref (app);
-
-  return exit_code;
+  return g_application_run (app, 0, NULL);
 }

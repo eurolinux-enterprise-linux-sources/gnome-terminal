@@ -14,7 +14,7 @@ DISTCHECK_CONFIGURE_FLAGS = \
 	$(NULL)
 
 desktopdir = $(datadir)/applications
-desktop_in_files = @PACKAGE@.desktop.in.in
+desktop_in_files = org.gnome.Terminal.desktop.in.in
 nodist_desktop_DATA = $(desktop_in_files:.desktop.in.in=.desktop)
 @INTLTOOL_DESKTOP_RULE@
 
@@ -24,16 +24,21 @@ desktop-file-validate: $(nodist_desktop_DATA)
 		$(DESKTOP_FILE_VALIDATE) $(DESKTOP_FILE_VALIDATE_FLAGS) $$f; \
 	done
 
-appdatadir = $(datadir)/appdata
-appdata_in_files = gnome-terminal.appdata.xml.in
-nodist_appdata_DATA = $(appdata_in_files:.xml.in=.xml)
-@INTLTOOL_XML_RULE@
+appdata_in_files = \
+	org.gnome.Terminal.appdata.xml.in \
+	org.gnome.Terminal.Nautilus.metainfo.xml.in \
+	$(NULL)
 
-APPDATA_VALIDATE_FLAGS = --nonet
-appdata-validate: $(nodist_appdata_DATA)
-	for f in $^; do \
-		$(APPDATA_VALIDATE) $(APPDATA_VALIDATE_FLAGS) $$f; \
-	done
+appdatadir = $(datadir)/appdata
+nodist_appdata_DATA = \
+	org.gnome.Terminal.appdata.xml \
+	$(NULL)
+
+if WITH_NAUTILUS_EXTENSION
+nodist_appdata_DATA += org.gnome.Terminal.Nautilus.metainfo.xml
+endif
+
+@INTLTOOL_XML_RULE@
 
 check-local: desktop-file-validate
 

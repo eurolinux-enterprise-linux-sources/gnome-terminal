@@ -2,37 +2,38 @@
 #
 # This file is distributed under the same license as the gnome-terminal package.
 #
-# Bruce Smit <brz@brz.nu>, 2002
-# Ronald Hummelink <ronald@hummelink.xs4all.nl>, 2002
-# Reinout van Schouwen <reinouts@gnome.org>, 2002, 2005, 2013
-# Daniel van Eeden <daniel_e@dds.nl>, 2003
 # Vincent van Adrighem <adrighem@gnome.org> 2003
-# Tino Meinen <a.t.meinen@chello.nl>, 2003, 2005, 2006
-# Jeroen Hooyberghs <jeroen@hooyberghs.org>, 2009
-# Wouter Bolsterlee <wbolster@gnome.org>, 2006‒2013
-# Erwin Poeze <donnut@outlook.com>, 2013, 2014.
 #
 # Voeg jezelf ook toe aan de string translator-credits als je mee hebt geholpen
 # aan de vertaling van dit pakket.
 #
+# Bruce Smit <brz@brz.nu>, 2002.
+# Ronald Hummelink <ronald@hummelink.xs4all.nl>, 2002.
+# Reinout van Schouwen <reinouts@gnome.org>, 2002, 2005, 2013.
+# Daniel van Eeden <daniel_e@dds.nl>, 2003.
+# Tino Meinen <a.t.meinen@chello.nl>, 2003, 2005, 2006.
+# Jeroen Hooyberghs <jeroen@hooyberghs.org>, 2009.
+# Wouter Bolsterlee <wbolster@gnome.org>, 2006‒2013.
+# Erwin Poeze <donnut@outlook.com>, 2013, 2014.
+# Hannie Dumoleyn <hannie@ubuntu-nl.org>, 2014.
 msgid ""
 msgstr ""
 "Project-Id-Version: gnome-terminal\n"
 "Report-Msgid-Bugs-To: http://bugzilla.gnome.org/enter_bug.cgi?product=gnome-"
 "terminal&keywords=I18N+L10N&component=general\n"
-"POT-Creation-Date: 2014-11-17 08:37+0000\n"
-"PO-Revision-Date: 2014-11-17 16:34+0100\n"
-"Last-Translator: Erwin Poeze <donnut@outlook.com>\n"
+"POT-Creation-Date: 2014-11-15 20:14+0000\n"
+"PO-Revision-Date: 2014-11-16 11:30+0100\n"
+"Last-Translator: Hannie Dumoleyn <hannie@ubuntu-nl.org>\n"
 "Language-Team: Dutch <gnome-nl-list@gnome.org>\n"
 "Language: nl\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Poedit 1.6.10\n"
+"X-Generator: Lokalize 1.5\n"
 
 #: ../gnome-terminal.appdata.xml.in.h:1 ../gnome-terminal.desktop.in.in.h:1
-#: ../src/server.c:121 ../src/terminal-accels.c:222 ../src/terminal.c:243
+#: ../src/server.c:157 ../src/terminal-accels.c:222 ../src/terminal.c:243
 #: ../src/terminal-tab-label.c:79 ../src/terminal-tabs-menu.c:180
 #: ../src/terminal-window.c:2582 ../src/terminal-window.c:2932
 msgid "Terminal"
@@ -70,7 +71,7 @@ msgstr "Zoeken"
 
 #: ../src/find-dialog.ui.h:2
 msgid "_Search for:"
-msgstr "_Zoek naar:"
+msgstr "_Zoeken naar:"
 
 #: ../src/find-dialog.ui.h:3
 msgid "_Match case"
@@ -98,30 +99,35 @@ msgstr "Uitvoer onderdrukken"
 
 #: ../src/gterminal.vala:31
 msgid "Verbose output"
-msgstr "Uitvoer detailleren"
+msgstr "Uitgebreide uitvoer"
 
 #: ../src/gterminal.vala:43
+#| msgid "Exec options:"
 msgid "Output options:"
 msgstr "Uitvoeropties:"
 
 # terminal/terminalvenster
 #: ../src/gterminal.vala:44
+#| msgid "Show window options"
 msgid "Show output options"
 msgstr "Uitvoeropties tonen"
 
 #: ../src/gterminal.vala:84
 #, c-format
+#| msgid "\"%s\" is not a valid zoom factor"
 msgid "\"%s\" is not a valid application ID"
-msgstr "‘%s’ is geen geldige applicatie-id"
+msgstr "‘%s’ is geen geldig toepasings-ID"
 
 # terminal/terminalvenster
 #: ../src/gterminal.vala:96
+#| msgid "Server options:"
 msgid "Server application ID"
-msgstr "Serverapplicatie-id:"
+msgstr "Servertoepassings-ID"
 
 #: ../src/gterminal.vala:96
+#| msgid "UUID"
 msgid "ID"
-msgstr "Id"
+msgstr "ID"
 
 # terminal/terminalvenster
 #: ../src/gterminal.vala:103
@@ -135,25 +141,25 @@ msgstr "Algemene instellingen tonen"
 
 #: ../src/gterminal.vala:127 ../src/gterminal.vala:148
 msgid "FD passing of stdin is not supported"
-msgstr "Doorgeven BD van stdin is niet ondersteund"
+msgstr "Doorgeven van FD van stdin wordt niet ondersteund"
 
 #: ../src/gterminal.vala:128 ../src/gterminal.vala:149
 msgid "FD passing of stdout is not supported"
-msgstr "Doorgeven BD van stdout is niet ondersteund"
+msgstr "Doorgeven van FD van stdout wordt niet ondersteund"
 
 #: ../src/gterminal.vala:129 ../src/gterminal.vala:150
 msgid "FD passing of stderr is not supported"
-msgstr "Doorgeven BD van stderr is niet ondersteund"
+msgstr "Doorgeven van FD van stderr wordt niet ondersteund"
 
 #: ../src/gterminal.vala:141
 #, c-format
 msgid "Invalid argument \"%s\" to --fd option"
-msgstr "Argument ‘%s’ van --fd-optie is ongeldig"
+msgstr "Ongeldig argument ‘%s’ bij --fd optie"
 
 #: ../src/gterminal.vala:154
 #, c-format
 msgid "Cannot pass FD %d twice"
-msgstr "BD %d kan niet dubbel worden doorgegeven"
+msgstr "FD %d kan niet twee keer worden doorgegeven"
 
 #: ../src/gterminal.vala:177
 msgid "Forward stdin"
@@ -185,8 +191,9 @@ msgid "Show exec options"
 msgstr "Exec-instellingen tonen"
 
 #: ../src/gterminal.vala:210
+#| msgid "Maximize the window"
 msgid "Maximise the window"
-msgstr "venster maximaliseren"
+msgstr "Het venster maximaliseren"
 
 #: ../src/gterminal.vala:212 ../src/terminal-options.c:1075
 msgid "Full-screen the window"
@@ -224,7 +231,7 @@ msgstr "Vensteropties tonen"
 #: ../src/gterminal.vala:243
 #, c-format
 msgid "May only use option %s once"
-msgstr "Optie %s mag eenmalig gebruikt worden"
+msgstr "Optie %s mag slechts eenmaal gebruikt worden"
 
 #: ../src/gterminal.vala:256 ../src/terminal-options.c:657
 #, c-format
@@ -234,7 +241,7 @@ msgstr "‘%s’ is geen geldige zoomfactor"
 #: ../src/gterminal.vala:260
 #, c-format
 msgid "Zoom value \"%s\" is outside allowed range"
-msgstr "Zoomwaarde ‘%s’ overschrijdt toegestane bereik"
+msgstr "Zoomwaarde ‘%s’ valt buiten het toegestane bereik"
 
 #: ../src/gterminal.vala:269 ../src/terminal-options.c:1124
 msgid "Use the given profile instead of the default profile"
@@ -287,24 +294,26 @@ msgstr "Procesinstellingen tonen"
 #: ../src/gterminal.vala:474
 #, c-format
 msgid "'%s' needs the command to run as arguments after '--'"
-msgstr "‘%s’ vereist dat de opdracht als argument wordt uitgevoerd na '--'"
+msgstr "Voor ‘%s’ moet de opdracht als argumenten worden uitgevoerd na ‘--’"
 
 #: ../src/gterminal.vala:508
 msgid "Missing argument"
-msgstr "Argument ontbreekt"
+msgstr "Ontbrekend argument"
 
 #: ../src/gterminal.vala:532
 #, c-format
 msgid "Unknown completion request for \"%s\""
-msgstr "Onbekende aanvulopdracht voor ‘%s’"
+msgstr "Onbekende aanvullingsaanvraag voor ‘%s’"
 
 #: ../src/gterminal.vala:557
+#| msgid "Terminal"
 msgid "GTerminal"
 msgstr "GTerminal"
 
 #: ../src/gterminal.vala:561
+#| msgid "Error parsing command: %s"
 msgid "Missing command"
-msgstr "Ontbrekende opdracht"
+msgstr "Opdracht ontbreekt"
 
 #: ../src/gterminal.vala:570
 #, c-format
@@ -313,8 +322,9 @@ msgstr "Onbekende opdracht ‘%s’"
 
 #: ../src/gterminal.vala:574
 #, c-format
+#| msgid "Error parsing command: %s"
 msgid "Error processing arguments: %s\n"
-msgstr "Verwerken van argumenten is mislukt: %s\n"
+msgstr "Fout bij verwerking van argumenten: %s\n"
 
 #: ../src/migration.c:385
 msgid "Default"
@@ -600,8 +610,8 @@ msgid ""
 "Whether ambiguous-width characters are narrow or wide when using UTF-8 "
 "encoding"
 msgstr ""
-"Of karakters met ambigue breedte bij gebruikt van UTF-8-codering breed of "
-"smal zijn"
+"Of tekens van onduidelijke breedte smal of breed zijn wanneer UTF-8-codering "
+"wordt gebruikt"
 
 #: ../src/org.gnome.Terminal.gschema.xml.h:52
 msgid "Keyboard shortcut to open a new tab"
@@ -723,16 +733,21 @@ msgstr ""
 "de mogelijkheid om deze sneltoetsen uit te schakelen."
 
 #: ../src/org.gnome.Terminal.gschema.xml.h:80
+#| msgid "Whether the standard GTK shortcut for menubar access is enabled"
 msgid "Whether shortcuts are enabled"
-msgstr "Of sneltoetsen zijn ingeschakeld"
+msgstr "Of sneltoetsen ingeschakeld zijn"
 
 #: ../src/org.gnome.Terminal.gschema.xml.h:81
+#| msgid ""
+#| "Whether to have Alt+letter access keys for the menubar. They may "
+#| "interfere with some applications run inside the terminal so it's possible "
+#| "to turn them off."
 msgid ""
 "Whether shortcuts are enabled. They may interfere with some applications run "
 "inside the terminal so it's possible to turn them off."
 msgstr ""
-"Of sneltoetsen zijn ingeschakeld. Deze kunnen conflicteren met bepaalde "
-"toepassingen die in de terminal draaien. Vandaar de mogelijkheid om "
+"Of sneltoetsen ingeschakeld zijn. Deze kunnen conflicteren met bepaalde "
+"toepassingen die in de terminal draaien. Vandaar de mogelijkheid om deze "
 "sneltoetsen uit te schakelen."
 
 #: ../src/org.gnome.Terminal.gschema.xml.h:82
@@ -758,6 +773,10 @@ msgid "List of available encodings"
 msgstr "Lijst met beschikbare coderingen"
 
 #: ../src/org.gnome.Terminal.gschema.xml.h:86
+#| msgid ""
+#| "A subset of possible encodings are presented in the Encoding submenu. "
+#| "This is a list of encodings to appear there. The special encoding name "
+#| "\"current\" means to display the encoding of the current locale."
 msgid ""
 "A subset of possible encodings are presented in the Encoding submenu. This "
 "is a list of encodings to appear there."
@@ -821,8 +840,9 @@ msgid "General"
 msgstr "Algemeen"
 
 #: ../src/preferences.ui.h:12
+#| msgid "Shortcuts"
 msgid "_Enable shortcuts"
-msgstr "Sneltoetsen _inschakelen"
+msgstr "Sneltoetsen i_nschakelen"
 
 #: ../src/preferences.ui.h:13
 msgid "Shortcuts"
@@ -870,13 +890,15 @@ msgstr "Wit op zwart"
 
 #. Translators: "Solarized" is the name of a colour scheme, "light" can be translated
 #: ../src/profile-editor.c:69
+#| msgid "Solarized"
 msgid "Solarized light"
-msgstr "Solarized licht"
+msgstr "Gesolariseerd helder"
 
 #. Translators: "Solarized" is the name of a colour scheme, "dark" can be translated
 #: ../src/profile-editor.c:74
+#| msgid "Solarized"
 msgid "Solarized dark"
-msgstr "Solarized donker"
+msgstr "Gesolariseerd donker"
 
 #: ../src/profile-editor.c:438
 #, c-format
@@ -1026,8 +1048,9 @@ msgid "Profile ID:"
 msgstr "Profiel-ID:"
 
 #: ../src/profile-preferences.ui.h:50
+#| msgid "Initial _title:"
 msgid "Initial terminal si_ze:"
-msgstr "Initiële terminal_grootte:"
+msgstr "Oorspronkelijke _afmeting van de terminal:"
 
 #: ../src/profile-preferences.ui.h:51
 msgid "columns"
@@ -1038,8 +1061,9 @@ msgid "rows"
 msgstr "rijen"
 
 #: ../src/profile-preferences.ui.h:53
+#| msgid "Reset"
 msgid "Rese_t"
-msgstr "_Herstellen"
+msgstr "Her_stellen"
 
 #: ../src/profile-preferences.ui.h:54
 msgid "Cursor _shape:"
@@ -1050,6 +1074,7 @@ msgid "Terminal _bell"
 msgstr "_Terminalbel"
 
 #: ../src/profile-preferences.ui.h:56
+#| msgid "The cursor appearance"
 msgid "Text Appearance"
 msgstr "Tekstuiterlijk"
 
@@ -1062,8 +1087,9 @@ msgid "_Rewrap on resize"
 msgstr "_Regels opnieuw afbreken bij grootteverandering"
 
 #: ../src/profile-preferences.ui.h:59
+#| msgid "Custom"
 msgid "_Custom font"
-msgstr "_Aangepast lettertype"
+msgstr "Aangepast l_ettertype"
 
 #: ../src/profile-preferences.ui.h:60
 msgid "Choose A Terminal Font"
@@ -1162,8 +1188,9 @@ msgid "Scroll on _output"
 msgstr "S_chuiven bij nieuwe uitvoer"
 
 #: ../src/profile-preferences.ui.h:85
+#| msgid "Scroll_back:"
 msgid "_Limit scrollback to:"
-msgstr "Beperkt _terugschuiven tot:"
+msgstr "_Terugschuiven beperken tot:"
 
 #: ../src/profile-preferences.ui.h:86
 msgid "lines"
@@ -1196,12 +1223,14 @@ msgid "_Backspace key generates:"
 msgstr "_Backspace-toets genereert:"
 
 #: ../src/profile-preferences.ui.h:92
+#| msgid "_Encoding"
 msgid "_Encoding:"
 msgstr "_Codering:"
 
 #: ../src/profile-preferences.ui.h:93
+#| msgid "Select-by-_word characters:"
 msgid "Ambiguous-_width characters:"
-msgstr "Ambigue-_breedte tekens:"
+msgstr "Tekens met onduidelijke _breedte:"
 
 #: ../src/profile-preferences.ui.h:94
 msgid "_Reset Compatibility Options to Defaults"
@@ -2022,7 +2051,7 @@ msgstr "In_houd"
 
 #: ../src/terminal-window.c:2490
 msgid "_Inspector"
-msgstr "_Inspector"
+msgstr "_Controleur"
 
 #. Popup menu
 #: ../src/terminal-window.c:2496

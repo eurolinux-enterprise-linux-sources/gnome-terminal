@@ -29,7 +29,7 @@ G_BEGIN_DECLS
 
 #define GNOME_TERMINAL_ICON_NAME "utilities-terminal"
 
-#define TERMINAL_RESOURCES_PATH_PREFIX "/org/gnome/terminal/"
+#define TERMINAL_RESOURCES_PATH_PREFIX "/org/gnome/terminal"
 
 #define MONOSPACE_FONT_KEY_NAME                 "monospace-font-name"
 
@@ -74,7 +74,9 @@ TerminalWindow * terminal_app_new_window   (TerminalApp *app,
 TerminalScreen *terminal_app_new_terminal (TerminalApp     *app,
                                            TerminalWindow  *window,
                                            GSettings       *profile,
+                                           const char      *encoding,
                                            char           **override_command,
+                                           const char      *title,
                                            const char      *working_dir,
                                            char           **child_env,
                                            double           zoom);
@@ -109,6 +111,8 @@ GSettings *terminal_app_get_global_settings (TerminalApp *app);
 GSettings *terminal_app_get_desktop_interface_settings (TerminalApp *app);
 
 GSettings *terminal_app_get_proxy_settings (TerminalApp *app);
+
+GSettings *terminal_app_get_gtk_debug_settings (TerminalApp *app);
 
 PangoFontDescription *terminal_app_get_system_font (TerminalApp *app);
 

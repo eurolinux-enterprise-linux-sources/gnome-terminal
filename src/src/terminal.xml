@@ -72,6 +72,8 @@
     <menu action="Help">
       <menuitem action="HelpContents" />
       <menuitem action="HelpAbout" />
+      <separator />
+      <menuitem action="HelpInspector" />
     </menu>
   </menubar>
 
@@ -82,6 +84,7 @@
     <menuitem action="PopupCopyCallAddress" />
     <menuitem action="PopupOpenLink" />
     <menuitem action="PopupCopyLinkAddress" />
+    <menuitem action="PopupNumberInfo" />
     <separator />
     <menuitem action="PopupNewTerminal" />
     <separator />
@@ -104,6 +107,10 @@
     <menuitem action="TabsMoveLeft"/>
     <menuitem action="TabsMoveRight"/>
     <separator />
+    <menuitem action="TabsDetach"/>
+    <separator />
     <menuitem action="FileCloseTab"/>
-  </popup>  
+  </popup>
+  <popup name="TabsPopup" action="TabsPopup" accelerators="true">
+  </popup>
 </ui>

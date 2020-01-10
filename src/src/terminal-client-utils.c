@@ -54,7 +54,9 @@ terminal_client_append_create_instance_options (GVariantBuilder *builder,
                                                 const char      *geometry,
                                                 const char      *role,
                                                 const char      *profile,
+                                                const char      *encoding,
                                                 const char      *title,
+                                                gboolean         active,
                                                 gboolean         maximise_window,
                                                 gboolean         fullscreen_window)
 {
@@ -62,29 +64,36 @@ terminal_client_append_create_instance_options (GVariantBuilder *builder,
   g_variant_builder_add (builder, "{sv}",
                          "display", g_variant_new_bytestring (display_name));
   if (startup_id)
-    g_variant_builder_add (builder, "{sv}", 
+    g_variant_builder_add (builder, "{sv}",
                            "desktop-startup-id", g_variant_new_bytestring (startup_id));
 
   /* String options */
   if (profile)
-    g_variant_builder_add (builder, "{sv}", 
+    g_variant_builder_add (builder, "{sv}",
                            "profile", g_variant_new_string (profile));
+  if (encoding)
+    g_variant_builder_add (builder, "{sv}",
+                           "encoding", g_variant_new_string (encoding));
   if (title)
-    g_variant_builder_add (builder, "{sv}", 
+    g_variant_builder_add (builder, "{sv}",
                            "title", g_variant_new_string (title));
   if (geometry)
-    g_variant_builder_add (builder, "{sv}", 
+    g_variant_builder_add (builder, "{sv}",
                            "geometry", g_variant_new_string (geometry));
   if (role)
-    g_variant_builder_add (builder, "{sv}", 
+    g_variant_builder_add (builder, "{sv}",
                            "role", g_variant_new_string (role));
 
   /* Boolean options */
+  if (active)
+    g_variant_builder_add (builder, "{sv}",
+                           "active", g_variant_new_boolean (active));
+
   if (maximise_window)
-    g_variant_builder_add (builder, "{sv}", 
+    g_variant_builder_add (builder, "{sv}",
                            "maximize-window", g_variant_new_boolean (TRUE));
   if (fullscreen_window)
-    g_variant_builder_add (builder, "{sv}", 
+    g_variant_builder_add (builder, "{sv}",
                            "fullscreen-window", g_variant_new_boolean (TRUE));
 }
 
@@ -109,7 +118,6 @@ terminal_client_append_exec_options (GVariantBuilder *builder,
   envv = g_environ_unsetenv (envv, "COLORTERM");
   envv = g_environ_unsetenv (envv, "COLUMNS");
   envv = g_environ_unsetenv (envv, "DESKTOP_STARTUP_ID");
-  envv = g_environ_unsetenv (envv, "DISPLAY");
   envv = g_environ_unsetenv (envv, "GIO_LAUNCHED_DESKTOP_FILE_PID");
   envv = g_environ_unsetenv (envv, "GIO_LAUNCHED_DESKTOP_FILE");
   envv = g_environ_unsetenv (envv, "GNOME_DESKTOP_ICON");
