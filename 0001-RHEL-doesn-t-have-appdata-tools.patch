@@ -1,0 +1,47 @@
+From 99122b33a64774b43bb2c83573fc90eb36b85542 Mon Sep 17 00:00:00 2001
+From: Debarshi Ray <debarshir@gnome.org>
+Date: Mon, 4 May 2015 15:54:04 +0200
+Subject: [PATCH] RHEL doesn't have appdata-tools
+
+---
+ Makefile.am  | 6 ------
+ configure.ac | 6 ------
+ 2 files changed, 12 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index eccf5ce..f6f41a6 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -29,12 +29,6 @@ appdata_in_files = gnome-terminal.appdata.xml.in
+ nodist_appdata_DATA = $(appdata_in_files:.xml.in=.xml)
+ @INTLTOOL_XML_RULE@
+ 
+-APPDATA_VALIDATE_FLAGS = --nonet
+-appdata-validate: $(nodist_appdata_DATA)
+-	for f in $^; do \
+-		$(APPDATA_VALIDATE) $(APPDATA_VALIDATE_FLAGS) $$f; \
+-	done
+-
+ check-local: desktop-file-validate
+ 
+ EXTRA_DIST = 			\
+diff --git a/configure.ac b/configure.ac
+index 315e9bf..8ea5301 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -189,12 +189,6 @@ if test -z "$DESKTOP_FILE_VALIDATE"; then
+   AC_MSG_ERROR([desktop-file-validate not found])
+ fi
+ 
+-AC_ARG_VAR([APPDATA_VALIDATE],[the appdata-validate programme])
+-AC_PATH_PROG([APPDATA_VALIDATE],[appdata-validate],[])
+-if test -z "$APPDATA_VALIDATE"; then
+-  AC_MSG_ERROR([appdata-validate not found])
+-fi
+-
+ # ***************************
+ # GNOME Shell search provider
+ # ***************************
+-- 
+2.1.0
+

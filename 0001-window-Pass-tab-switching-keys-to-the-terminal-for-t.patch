@@ -1,0 +1,39 @@
+From 05b62cc3b8454d435df5d7c312bbc27b1b12cc10 Mon Sep 17 00:00:00 2001
+From: Debarshi Ray <debarshir@gnome.org>
+Date: Mon, 5 Oct 2015 20:13:05 +0200
+Subject: [PATCH] window: Pass tab switching keys to the terminal for tabless
+ windows
+
+This was removed as a side effect of
+a319aeb66f36e728af1b4929ddd69574df838702
+
+https://bugzilla.gnome.org/show_bug.cgi?id=730128
+---
+ src/terminal-window.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/terminal-window.c b/src/terminal-window.c
+index ce85744eba6e..d6d3882d6ac4 100644
+--- a/src/terminal-window.c
++++ b/src/terminal-window.c
+@@ -1819,6 +1819,7 @@ static void
+ terminal_window_update_tabs_menu_sensitivity (TerminalWindow *window)
+ {
+   TerminalWindowPrivate *priv = window->priv;
++  GAction *gaction;
+   GtkActionGroup *action_group = priv->action_group;
+   GtkAction *action;
+   int num_pages, page_num;
+@@ -1855,6 +1856,9 @@ terminal_window_update_tabs_menu_sensitivity (TerminalWindow *window)
+   gtk_action_set_sensitive (action, not_last);
+ #endif
+ 
++  gaction = g_action_map_lookup_action (G_ACTION_MAP (window), "switch-tab");
++  g_simple_action_set_enabled (G_SIMPLE_ACTION (gaction), num_pages > 1);
++
+   action = gtk_action_group_get_action (action_group, "TabsMoveLeft");
+   gtk_action_set_sensitive (action, not_first);
+   action = gtk_action_group_get_action (action_group, "TabsMoveRight");
+-- 
+2.1.0
+

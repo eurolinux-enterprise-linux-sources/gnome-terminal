@@ -1,0 +1,1690 @@
+From d5007c30b9fc14175cf8d226009b14b490b299da Mon Sep 17 00:00:00 2001
+From: Christian Persch <chpe@gnome.org>
+Date: Tue, 16 Feb 2016 18:59:09 +0100
+Subject: [PATCH 1/6] client: legacy: Reimplement deprecated --title option
+
+This reverts commit 0033eca2909ddccf3358c1f089bce05d3473b123.
+
+Reimplement the deprecated --title client option. It seems it is absolutely
+required by all those super l33t unix admins that are above using a lowly
+command like printf(1) or the even simpler xtermcontrol(1).
+
+https://bugzilla.gnome.org/show_bug.cgi?id=740188
+---
+ src/terminal-app.c     |  3 ++-
+ src/terminal-app.h     |  1 +
+ src/terminal-gdbus.c   |  6 ++++--
+ src/terminal-options.c | 45 +++++++++++++++++++++++++++++++++++++++++++--
+ src/terminal-options.h |  2 ++
+ src/terminal-screen.c  | 24 ++++++++++++++++++++++++
+ src/terminal-screen.h  |  1 +
+ src/terminal-window.c  |  2 +-
+ src/terminal.c         |  2 +-
+ 9 files changed, 79 insertions(+), 7 deletions(-)
+
+diff --git a/src/terminal-app.c b/src/terminal-app.c
+index 95302c5ab77e..7d5ce40c301a 100644
+--- a/src/terminal-app.c
++++ b/src/terminal-app.c
+@@ -542,6 +542,7 @@ terminal_app_new_terminal (TerminalApp     *app,
+                            TerminalWindow  *window,
+                            GSettings       *profile,
+                            char           **override_command,
++                           const char      *title,
+                            const char      *working_dir,
+                            char           **child_env,
+                            double           zoom)
+@@ -551,7 +552,7 @@ terminal_app_new_terminal (TerminalApp     *app,
+   g_return_val_if_fail (TERMINAL_IS_APP (app), NULL);
+   g_return_val_if_fail (TERMINAL_IS_WINDOW (window), NULL);
+ 
+-  screen = terminal_screen_new (profile, override_command,
++  screen = terminal_screen_new (profile, override_command, title,
+                                 working_dir, child_env, zoom);
+ 
+   terminal_window_add_screen (window, screen, -1);
+diff --git a/src/terminal-app.h b/src/terminal-app.h
+index 95028454dacf..6da6036dd719 100644
+--- a/src/terminal-app.h
++++ b/src/terminal-app.h
+@@ -75,6 +75,7 @@ TerminalScreen *terminal_app_new_terminal (TerminalApp     *app,
+                                            TerminalWindow  *window,
+                                            GSettings       *profile,
+                                            char           **override_command,
++                                           const char      *title,
+                                            const char      *working_dir,
+                                            char           **child_env,
+                                            double           zoom);
+diff --git a/src/terminal-gdbus.c b/src/terminal-gdbus.c
+index 90597d465b73..40f426af3701 100644
+--- a/src/terminal-gdbus.c
++++ b/src/terminal-gdbus.c
+@@ -368,7 +368,7 @@ terminal_factory_impl_create_instance (TerminalFactory *factory,
+   TerminalObjectSkeleton *skeleton;
+   char *object_path;
+   GSettings *profile = NULL;
+-  const char *profile_uuid;
++  const char *profile_uuid, *title;
+   gboolean zoom_set = FALSE;
+   gdouble zoom = 1.0;
+   guint window_id;
+@@ -456,10 +456,12 @@ terminal_factory_impl_create_instance (TerminalFactory *factory,
+ 
+   g_assert (window != NULL);
+ 
++  if (!g_variant_lookup (options, "title", "&s", &title))
++    title = NULL;
+   if (g_variant_lookup (options, "zoom", "d", &zoom))
+     zoom_set = TRUE;
+ 
+-  screen = terminal_screen_new (profile, NULL, NULL, NULL,
++  screen = terminal_screen_new (profile, NULL, title, NULL, NULL, 
+                                 zoom_set ? zoom : 1.0);
+   terminal_window_add_screen (window, screen, -1);
+ 
+diff --git a/src/terminal-options.c b/src/terminal-options.c
+index d12b2d723101..475e6d4c7ad1 100644
+--- a/src/terminal-options.c
++++ b/src/terminal-options.c
+@@ -96,6 +96,7 @@ initial_tab_new (char *profile /* adopts */)
+ 
+   it->profile = profile;
+   it->exec_argv = NULL;
++  it->title = NULL;
+   it->working_dir = NULL;
+   it->zoom = 1.0;
+   it->zoom_set = FALSE;
+@@ -109,6 +110,7 @@ initial_tab_free (InitialTab *it)
+ {
+   g_free (it->profile);
+   g_strfreev (it->exec_argv);
++  g_free (it->title);
+   g_free (it->working_dir);
+   g_slice_free (InitialTab, it);
+ }
+@@ -213,6 +215,15 @@ add_new_window (TerminalOptions *options,
+ }
+ 
+ /* handle deprecated command line options */
++
++static void
++deprecated_option_warning (const gchar *option_name)
++{
++  g_printerr (_("Option \"%s\" is deprecated and might be removed in a later version of gnome-terminal."),
++              option_name);
++  g_printerr ("\n");
++}
++
+ static gboolean
+ unsupported_option_callback (const gchar *option_name,
+                              const gchar *value,
+@@ -594,6 +605,32 @@ option_load_config_cb (const gchar *option_name,
+ }
+ 
+ static gboolean
++option_title_callback (const gchar *option_name,
++                       const gchar *value,
++                       gpointer     data,
++                       GError     **error)
++{
++  TerminalOptions *options = data;
++
++  deprecated_option_warning (option_name);
++
++  if (options->initial_windows)
++    {
++      InitialTab *it = ensure_top_tab (options);
++
++      g_free (it->title);
++      it->title = g_strdup (value);
++    }
++  else
++    {
++      g_free (options->default_title);
++      options->default_title = g_strdup (value);
++    }
++
++  return TRUE;
++}
++
++static gboolean
+ option_working_directory_callback (const gchar *option_name,
+                                    const gchar *value,
+                                    gpointer     data,
+@@ -763,6 +800,7 @@ terminal_options_parse (const char *working_directory,
+   options->initial_windows = NULL;
+   options->default_role = NULL;
+   options->default_geometry = NULL;
++  options->default_title = NULL;
+   options->zoom = 1.0;
+   options->zoom_set = FALSE;
+ 
+@@ -906,6 +944,7 @@ terminal_options_merge_config (TerminalOptions *options,
+ /*          it->width = g_key_file_get_integer (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_WIDTH, NULL);
+           it->height = g_key_file_get_integer (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_HEIGHT, NULL);*/
+           it->working_dir = terminal_util_key_file_get_string_unescape (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_WORKING_DIRECTORY, NULL);
++          it->title = g_key_file_get_string (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_TITLE, NULL);
+ 
+           if (g_key_file_has_key (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_COMMAND, NULL) &&
+               !(it->exec_argv = terminal_util_key_file_get_argv (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_COMMAND, NULL, error)))
+@@ -963,6 +1002,7 @@ terminal_options_free (TerminalOptions *options)
+   g_free (options->default_role);
+   g_free (options->default_geometry);
+   g_free (options->default_working_dir);
++  g_free (options->default_title);
+   g_free (options->default_profile);
+ 
+   g_strfreev (options->exec_argv);
+@@ -1135,8 +1175,9 @@ get_goption_context (TerminalOptions *options)
+       't',
+       G_OPTION_FLAG_HIDDEN,
+       G_OPTION_ARG_CALLBACK,
+-      unsupported_option_callback,
+-      NULL, NULL
++      option_title_callback,
++      N_("Set the initial terminal title"),
++      N_("TITLE")
+     },
+     {
+       "working-directory",
+diff --git a/src/terminal-options.h b/src/terminal-options.h
+index 17f42b49472c..a1e645bd6f76 100644
+--- a/src/terminal-options.h
++++ b/src/terminal-options.h
+@@ -75,6 +75,7 @@ typedef struct
+   char    *default_role;
+   char    *default_geometry;
+   char    *default_working_dir;
++  char    *default_title;
+   char   **exec_argv;
+   char    *default_profile;
+   gboolean default_profile_is_id;
+@@ -94,6 +95,7 @@ typedef struct
+   char *profile;
+   gboolean profile_is_id;
+   char **exec_argv;
++  char *title;
+   char *working_dir;
+   double zoom;
+   guint zoom_set : 1;
+diff --git a/src/terminal-screen.c b/src/terminal-screen.c
+index a183f8515194..c0acb3c004ff 100644
+--- a/src/terminal-screen.c
++++ b/src/terminal-screen.c
+@@ -607,6 +607,7 @@ terminal_screen_finalize (GObject *object)
+ TerminalScreen *
+ terminal_screen_new (GSettings       *profile,
+                      char           **override_command,
++                     const char      *title,
+                      const char      *working_dir,
+                      char           **child_env,
+                      double           zoom)
+@@ -624,6 +625,29 @@ terminal_screen_new (GSettings       *profile,
+                          g_settings_get_int (profile, TERMINAL_PROFILE_DEFAULT_SIZE_COLUMNS_KEY),
+                          g_settings_get_int (profile, TERMINAL_PROFILE_DEFAULT_SIZE_ROWS_KEY));
+ 
++  /* If given an initial title, strip it of control characters and
++   * feed it to the terminal.
++   */
++  if (title != NULL) {
++    GString *seq;
++    const char *p;
++
++    seq = g_string_new ("\033]0;");
++    for (p = title; *p; p = g_utf8_next_char (p)) {
++      gunichar c = g_utf8_get_char (p);
++      if (c < 0x20 || (c >= 0x7f && c <= 0x9f))
++        continue;
++      else if (c == ';')
++        break;
++
++      g_string_append_unichar (seq, c);
++    }
++    g_string_append (seq, "\033\\");
++
++    vte_terminal_feed (VTE_TERMINAL (screen), seq->str, seq->len);
++    g_string_free (seq, TRUE);
++  }
++
+   priv->initial_working_directory = g_strdup (working_dir);
+ 
+   if (override_command)
+diff --git a/src/terminal-screen.h b/src/terminal-screen.h
+index 96f0a0d7aa4e..683fd27ba965 100644
+--- a/src/terminal-screen.h
++++ b/src/terminal-screen.h
+@@ -76,6 +76,7 @@ const char *terminal_screen_get_uuid (TerminalScreen *screen);
+ 
+ TerminalScreen *terminal_screen_new (GSettings       *profile,
+                                      char           **override_command,
++                                     const char      *title,
+                                      const char      *working_dir,
+                                      char           **child_env,
+                                      double           zoom);
+diff --git a/src/terminal-window.c b/src/terminal-window.c
+index 7ce467931c02..494a3ff5fca9 100644
+--- a/src/terminal-window.c
++++ b/src/terminal-window.c
+@@ -398,7 +398,7 @@ action_new_terminal_cb (GSimpleAction *action,
+ 
+   new_working_directory = terminal_screen_get_current_dir (priv->active_screen);
+   terminal_app_new_terminal (app, window, profile,
+-                             NULL,
++                             NULL, NULL,
+                              new_working_directory,
+                              terminal_screen_get_initial_environment (priv->active_screen),
+                              1.0);
+diff --git a/src/terminal.c b/src/terminal.c
+index 296d381e077a..97db93829e97 100644
+--- a/src/terminal.c
++++ b/src/terminal.c
+@@ -102,7 +102,7 @@ handle_options (TerminalFactory *factory,
+                                                           iw->geometry,
+                                                           iw->role,
+                                                           it->profile ? it->profile : options->default_profile,
+-                                                          NULL /* title */,
++                                                          it->title ? it->title : options->default_title,
+                                                           it->active,
+                                                           iw->start_maximized,
+                                                           iw->start_fullscreen);
+-- 
+2.5.5
+
+
+From 8cd7018f8af57752aec342a8652e9ab830549a56 Mon Sep 17 00:00:00 2001
+From: Debarshi Ray <debarshir@gnome.org>
+Date: Thu, 30 Jun 2016 16:02:13 +0200
+Subject: [PATCH 2/6] Revert "screen: Remove unused description and user_title
+ API"
+
+This reverts commit 3bb41272b7509a16ec2a5cd93e44f73d5743b626.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1296110
+---
+ src/terminal-screen.c | 63 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/terminal-screen.h |  6 +++++
+ 2 files changed, 69 insertions(+)
+
+diff --git a/src/terminal-screen.c b/src/terminal-screen.c
+index c0acb3c004ff..10675c505964 100644
+--- a/src/terminal-screen.c
++++ b/src/terminal-screen.c
+@@ -77,6 +77,7 @@ struct _TerminalScreenPrivate
+   GSettings *profile; /* never NULL */
+   guint profile_changed_id;
+   guint profile_forgotten_id;
++  char *title;
+   char *initial_working_directory;
+   char **initial_env;
+   char **override_command;
+@@ -101,6 +102,7 @@ enum {
+   PROP_ICON_TITLE,
+   PROP_ICON_TITLE_SET,
+   PROP_TITLE,
++  PROP_DESCRIPTION,
+   PROP_INITIAL_ENVIRONMENT
+ };
+ 
+@@ -387,6 +389,9 @@ terminal_screen_get_property (GObject *object,
+       case PROP_TITLE:
+         g_value_set_string (value, terminal_screen_get_title (screen));
+         break;
++      case PROP_DESCRIPTION:
++        g_value_take_string (value, terminal_screen_get_description (screen));
++        break;
+       default:
+         G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+         break;
+@@ -412,6 +417,7 @@ terminal_screen_set_property (GObject *object,
+       case PROP_ICON_TITLE:
+       case PROP_ICON_TITLE_SET:
+       case PROP_TITLE:
++      case PROP_DESCRIPTION:
+         /* not writable */
+       default:
+         G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+@@ -510,6 +516,13 @@ terminal_screen_class_init (TerminalScreenClass *klass)
+                           NULL,
+                           G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB));
+ 
++  g_object_class_install_property (object_class,
++                                   PROP_DESCRIPTION,
++                                   g_param_spec_string ("description", NULL, NULL,
++                                                        NULL,
++                                                        G_PARAM_READABLE | 
++                                                        G_PARAM_STATIC_STRINGS));
++
+   g_object_class_install_property
+     (object_class,
+      PROP_INITIAL_ENVIRONMENT,
+@@ -592,6 +605,7 @@ terminal_screen_finalize (GObject *object)
+ 
+   terminal_screen_set_profile (screen, NULL);
+ 
++  g_free (priv->title);
+   g_free (priv->initial_working_directory);
+   g_strfreev (priv->override_command);
+   g_strfreev (priv->initial_env);
+@@ -719,6 +733,21 @@ terminal_screen_get_icon_title_set (TerminalScreen *screen)
+   return vte_terminal_get_icon_title (VTE_TERMINAL (screen)) != NULL;
+ }
+ 
++char *
++terminal_screen_get_description (TerminalScreen *screen)
++{
++  TerminalScreenPrivate *priv = screen->priv;
++  const char *title;
++
++  /* use --title argument if one was supplied, otherwise ask the profile */
++  if (priv->title)
++    title = priv->title;
++
++  return g_strdup_printf ("%s — %d",
++                          title && title[0] ? title : _("Terminal"),
++                          screen->priv->child_pid);
++}
++
+ static void
+ terminal_screen_profile_changed_cb (GSettings     *profile,
+                                     const char    *prop_name,
+@@ -971,6 +1000,7 @@ terminal_screen_set_profile (TerminalScreen *screen,
+     g_object_unref (old_profile);
+ 
+   g_object_notify (G_OBJECT (screen), "profile");
++  g_object_notify (G_OBJECT (screen), "description");
+ }
+ 
+ GSettings*
+@@ -1378,6 +1408,8 @@ out:
+   g_strfreev (env);
+   free_fd_setup_data (data);
+ 
++  g_object_notify (G_OBJECT (screen), "description");
++
+   return result;
+ }
+ 
+@@ -1548,6 +1580,35 @@ terminal_screen_button_press (GtkWidget      *widget,
+   return FALSE;
+ }
+ 
++void
++terminal_screen_set_user_title (TerminalScreen *screen,
++                                const char     *title)
++{
++  TerminalScreenPrivate *priv = screen->priv;
++
++  g_return_if_fail (TERMINAL_IS_SCREEN (screen));
++
++  if (g_strcmp0 (priv->title, title) == 0)
++    return;
++
++  g_free (priv->title);
++  priv->title = title && title[0] ? g_strdup (title) : NULL;
++
++  g_object_notify (G_OBJECT (screen), "description");
++}
++
++const char*
++terminal_screen_get_user_title (TerminalScreen *screen)
++{
++  TerminalScreenPrivate *priv;
++
++  g_return_val_if_fail (TERMINAL_IS_SCREEN (screen), NULL);
++
++  priv = screen->priv;
++
++  return priv->title ? priv->title : _("Terminal");
++}
++
+ /**
+  * terminal_screen_get_current_dir:
+  * @screen:
+@@ -1605,6 +1666,8 @@ terminal_screen_child_exited (VteTerminal *terminal,
+ 
+   priv->child_pid = -1;
+   
++  g_object_notify (G_OBJECT (screen), "description");
++
+   action = g_settings_get_enum (priv->profile, TERMINAL_PROFILE_EXIT_ACTION_KEY);
+   
+   switch (action)
+diff --git a/src/terminal-screen.h b/src/terminal-screen.h
+index 683fd27ba965..d0341c8a0438 100644
+--- a/src/terminal-screen.h
++++ b/src/terminal-screen.h
+@@ -101,9 +101,15 @@ void         terminal_screen_set_initial_environment (TerminalScreen  *screen,
+                                                       char           **argv);
+ char **      terminal_screen_get_initial_environment (TerminalScreen  *screen);
+ 
++const char *terminal_screen_get_user_title     (TerminalScreen *screen);
+ const char* terminal_screen_get_title          (TerminalScreen *screen);
+ const char* terminal_screen_get_icon_title     (TerminalScreen *screen);
+ gboolean    terminal_screen_get_icon_title_set (TerminalScreen *screen);
++char *      terminal_screen_get_description    (TerminalScreen *screen);
++
++void terminal_screen_set_user_title (TerminalScreen *screen,
++                                     const char *text);
++
+ 
+ char *terminal_screen_get_current_dir (TerminalScreen *screen);
+ 
+-- 
+2.5.5
+
+
+From 6ff91354ca96949fddab40c466a3b0d9ba3f8029 Mon Sep 17 00:00:00 2001
+From: Debarshi Ray <debarshir@gnome.org>
+Date: Thu, 30 Jun 2016 17:39:48 +0200
+Subject: [PATCH 3/6] Revert "Remove the static title setting from profile
+ preferences"
+
+This reverts commit e9cb8fea14a849704074c5d69f173bcf4dc2fb27.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1296110
+---
+ src/migration.c                    |  3 ++
+ src/org.gnome.Terminal.gschema.xml |  5 +++
+ src/profile-editor.c               |  3 ++
+ src/profile-preferences.ui         | 86 ++++++++++++++++++++++++++++++++++++++
+ src/terminal-schemas.h             |  1 +
+ src/terminal-screen.c              |  9 ++++
+ 6 files changed, 107 insertions(+)
+
+diff --git a/src/migration.c b/src/migration.c
+index 6cdd573bdc10..477171d8a62e 100644
+--- a/src/migration.c
++++ b/src/migration.c
+@@ -86,6 +86,7 @@ enum {
+ #define KEY_SCROLL_ON_KEYSTROKE "scroll_on_keystroke"
+ #define KEY_SCROLL_ON_OUTPUT "scroll_on_output"
+ #define KEY_SILENT_BELL "silent_bell"
++#define KEY_TITLE "title"
+ #define KEY_UPDATE_RECORDS "update_records"
+ #define KEY_USE_CUSTOM_COMMAND "use_custom_command"
+ #define KEY_USE_SYSTEM_FONT "use_system_font"
+@@ -393,6 +394,8 @@ migrate_profile (TerminalSettingsList *list,
+   migrate_bool (client, path, KEY_BOLD_COLOR_SAME_AS_FG,
+                 settings, TERMINAL_PROFILE_BOLD_COLOR_SAME_AS_FG_KEY,
+                 FALSE);
++  migrate_string (client, path, KEY_TITLE,
++                  settings, TERMINAL_PROFILE_TITLE_KEY);
+   migrate_bool (client, path, KEY_ALLOW_BOLD,
+                 settings, TERMINAL_PROFILE_ALLOW_BOLD_KEY,
+                 FALSE);
+diff --git a/src/org.gnome.Terminal.gschema.xml b/src/org.gnome.Terminal.gschema.xml
+index c5741fd49b01..ceea90016c6c 100644
+--- a/src/org.gnome.Terminal.gschema.xml
++++ b/src/org.gnome.Terminal.gschema.xml
+@@ -116,6 +116,11 @@
+       <summary>Whether bold text should use the same color as normal text</summary>
+       <description>If true, boldface text will be rendered using the same color as normal text.</description>
+     </key>
++    <key name="title" type="s">
++      <default l10n="messages" context="title">'Terminal'</default>
++      <summary>Title for terminal</summary>
++      <description>Title to display for the terminal window or tab. This title may be replaced by or combined with the title set by the application inside the terminal, depending on the title_mode setting.</description>
++    </key>
+     <key name="allow-bold" type="b">
+       <default>true</default>
+       <summary>Whether to allow bold text</summary>
+diff --git a/src/profile-editor.c b/src/profile-editor.c
+index 47ed544a5013..28afae23ddc8 100644
+--- a/src/profile-editor.c
++++ b/src/profile-editor.c
+@@ -1041,6 +1041,9 @@ terminal_profile_edit (GSettings  *profile,
+                    "active",
+                    G_SETTINGS_BIND_GET | G_SETTINGS_BIND_SET |
+                    G_SETTINGS_BIND_INVERT_BOOLEAN);
++  g_settings_bind (profile, TERMINAL_PROFILE_TITLE_KEY,
++                   gtk_builder_get_object (builder, "title-entry"), "text",
++                   G_SETTINGS_BIND_GET | G_SETTINGS_BIND_SET);
+   g_settings_bind (profile, TERMINAL_PROFILE_UPDATE_RECORDS_KEY,
+                    gtk_builder_get_object (builder,
+                                            "update-records-checkbutton"),
+diff --git a/src/profile-preferences.ui b/src/profile-preferences.ui
+index 791c151739a8..1073e95ef2a0 100644
+--- a/src/profile-preferences.ui
++++ b/src/profile-preferences.ui
+@@ -555,6 +555,92 @@
+                 <property name="border_width">12</property>
+                 <property name="spacing">18</property>
+                 <child>
++                  <object class="GtkVBox" id="vbox79">
++                    <property name="visible">True</property>
++                    <property name="can_focus">False</property>
++                    <property name="spacing">6</property>
++                    <child>
++                      <object class="GtkLabel" id="label33">
++                        <property name="visible">True</property>
++                        <property name="can_focus">False</property>
++                        <property name="xalign">0</property>
++                        <property name="label" translatable="yes">Title</property>
++                        <attributes>
++                          <attribute name="weight" value="bold"/>
++                        </attributes>
++                      </object>
++                      <packing>
++                        <property name="expand">False</property>
++                        <property name="fill">False</property>
++                        <property name="position">0</property>
++                      </packing>
++                    </child>
++                    <child>
++                      <object class="GtkAlignment" id="alignment10108">
++                        <property name="visible">True</property>
++                        <property name="can_focus">False</property>
++                        <property name="left_padding">12</property>
++                        <child>
++                          <object class="GtkVBox" id="vbox93">
++                            <property name="visible">True</property>
++                            <property name="can_focus">False</property>
++                            <property name="spacing">6</property>
++                            <child>
++                              <object class="GtkHBox" id="hbox137">
++                                <property name="visible">True</property>
++                                <property name="can_focus">False</property>
++                                <property name="spacing">12</property>
++                                <child>
++                                  <object class="GtkLabel" id="title-entry-label">
++                                    <property name="visible">True</property>
++                                    <property name="can_focus">False</property>
++                                    <property name="xalign">0</property>
++                                    <property name="label" translatable="yes">_Title:</property>
++                                    <property name="use_underline">True</property>
++                                    <property name="justify">center</property>
++                                    <property name="mnemonic_widget">title-entry</property>
++                                  </object>
++                                  <packing>
++                                    <property name="expand">False</property>
++                                    <property name="fill">False</property>
++                                    <property name="position">0</property>
++                                  </packing>
++                                </child>
++                                <child>
++                                  <object class="GtkEntry" id="title-entry">
++                                    <property name="visible">True</property>
++                                    <property name="can_focus">True</property>
++                                  </object>
++                                  <packing>
++                                    <property name="expand">True</property>
++                                    <property name="fill">True</property>
++                                    <property name="position">1</property>
++                                  </packing>
++                                </child>
++                              </object>
++                              <packing>
++                                <property name="expand">False</property>
++                                <property name="fill">True</property>
++                                <property name="position">0</property>
++                              </packing>
++                            </child>
++                          </object>
++                        </child>
++                      </object>
++                      <packing>
++                        <property name="expand">False</property>
++                        <property name="fill">True</property>
++                        <property name="position">1</property>
++                      </packing>
++                    </child>
++                  </object>
++                  <packing>
++                    <property name="expand">False</property>
++                    <property name="fill">True</property>
++                    <property name="position">0</property>
++                  </packing>
++                </child>
++                <child>
+                   <object class="GtkVBox" id="vbox80">
+                     <property name="visible">True</property>
+                     <property name="can_focus">False</property>
+diff --git a/src/terminal-schemas.h b/src/terminal-schemas.h
+index 24c468af9630..2e836b260c17 100644
+--- a/src/terminal-schemas.h
++++ b/src/terminal-schemas.h
+@@ -56,6 +56,7 @@ G_BEGIN_DECLS
+ #define TERMINAL_PROFILE_SCROLLBAR_POLICY_KEY           "scrollbar-policy"
+ #define TERMINAL_PROFILE_SCROLL_ON_KEYSTROKE_KEY        "scroll-on-keystroke"
+ #define TERMINAL_PROFILE_SCROLL_ON_OUTPUT_KEY           "scroll-on-output"
++#define TERMINAL_PROFILE_TITLE_KEY                      "title"
+ #define TERMINAL_PROFILE_UPDATE_RECORDS_KEY             "update-records"
+ #define TERMINAL_PROFILE_USE_CUSTOM_COMMAND_KEY         "use-custom-command"
+ #define TERMINAL_PROFILE_USE_SKEY_KEY                   "use-skey"
+diff --git a/src/terminal-screen.c b/src/terminal-screen.c
+index 10675c505964..26201297d611 100644
+--- a/src/terminal-screen.c
++++ b/src/terminal-screen.c
+@@ -737,11 +737,14 @@ char *
+ terminal_screen_get_description (TerminalScreen *screen)
+ {
+   TerminalScreenPrivate *priv = screen->priv;
++  gs_free char *title_string = NULL;
+   const char *title;
+ 
+   /* use --title argument if one was supplied, otherwise ask the profile */
+   if (priv->title)
+     title = priv->title;
++  else
++    title = title_string = g_settings_get_string (priv->profile, TERMINAL_PROFILE_TITLE_KEY);
+ 
+   return g_strdup_printf ("%s — %d",
+                           title && title[0] ? title : _("Terminal"),
+@@ -791,6 +794,12 @@ terminal_screen_profile_changed_cb (GSettings     *profile,
+       vte_terminal_set_cjk_ambiguous_width (vte_terminal, (int) width);
+     }
+ 
++  if (!prop_name ||
++      prop_name == I_(TERMINAL_PROFILE_TITLE_KEY))
++    {
++      g_object_notify (object, "description");
++    }
++
+   if (gtk_widget_get_realized (GTK_WIDGET (screen)) &&
+       (!prop_name ||
+        prop_name == I_(TERMINAL_PROFILE_USE_SYSTEM_FONT_KEY) ||
+-- 
+2.5.5
+
+
+From a645f9fc3b5e235b9eb2e87bf7491a8f5051e9b5 Mon Sep 17 00:00:00 2001
+From: Debarshi Ray <debarshir@gnome.org>
+Date: Wed, 25 May 2016 13:47:36 +0200
+Subject: [PATCH 4/6] Restore the action and shortcut to set a static title
+ from the menus
+
+This reverts 9bbe19e98f62aa3c9020913a3a5a8080a5177505 with a minor
+adjustment to the accelerator handling to keep up with later changes.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1296110
+---
+ src/migration.c                    |  1 +
+ src/org.gnome.Terminal.gschema.xml |  4 ++
+ src/terminal-accels.c              |  3 ++
+ src/terminal-window.c              | 88 ++++++++++++++++++++++++++++++++++++++
+ src/terminal.xml                   |  3 ++
+ 5 files changed, 99 insertions(+)
+
+diff --git a/src/migration.c b/src/migration.c
+index 477171d8a62e..3040ea5cbe67 100644
+--- a/src/migration.c
++++ b/src/migration.c
+@@ -537,6 +537,7 @@ migrate_accels (GSettings *global_settings,
+     { "zoom_in",          "zoom-in"            },
+     { "zoom_out",         "zoom-out"           },
+     { "zoom_normal",      "zoom-normal"        },
++    { "set_window_title", "set-terminal-title" },
+     { "reset",            "reset"              },
+     { "reset_and_clear",  "reset-and-clear"    },
+     { "prev_tab",         "prev-tab"           },
+diff --git a/src/org.gnome.Terminal.gschema.xml b/src/org.gnome.Terminal.gschema.xml
+index ceea90016c6c..2f776e3a2707 100644
+--- a/src/org.gnome.Terminal.gschema.xml
++++ b/src/org.gnome.Terminal.gschema.xml
+@@ -389,6 +389,10 @@
+       <default>'disabled'</default>
+       <summary>Keyboard shortcut to toggle the visibility of the menubar</summary>
+     </key>
++    <key name="set-terminal-title" type="s">
++      <default>'disabled'</default>
++      <summary>Keyboard shortcut to set the terminal title</summary>
++    </key>
+     <key name="reset" type="s">
+       <default>'disabled'</default>
+       <summary>Keyboard shortcut to reset the terminal</summary>
+diff --git a/src/terminal-accels.c b/src/terminal-accels.c
+index 8a036ce796b6..24d48399bd2f 100644
+--- a/src/terminal-accels.c
++++ b/src/terminal-accels.c
+@@ -70,6 +70,7 @@
+ #define KEY_RESET_AND_CLEAR     "reset-and-clear"
+ #define KEY_RESET               "reset"
+ #define KEY_SAVE_CONTENTS       "save-contents"
++#define KEY_SET_TERMINAL_TITLE  "set-terminal-title"
+ #define KEY_TOGGLE_MENUBAR      "toggle-menubar"
+ #define KEY_ZOOM_IN             "zoom-in"
+ #define KEY_ZOOM_NORMAL         "zoom-normal"
+@@ -99,6 +100,7 @@
+ #define ACCEL_PATH_KEY_RESET                ACCEL_PATH_ROOT "TerminalReset"
+ #define ACCEL_PATH_KEY_RESET_AND_CLEAR      ACCEL_PATH_ROOT "TerminalResetClear"
+ #define ACCEL_PATH_KEY_SAVE_CONTENTS        ACCEL_PATH_ROOT "FileSaveContents"
++#define ACCEL_PATH_KEY_SET_TERMINAL_TITLE   ACCEL_PATH_ROOT "TerminalSetTitle"
+ #define ACCEL_PATH_KEY_TOGGLE_MENUBAR       ACCEL_PATH_ROOT "ViewMenubar"
+ #define ACCEL_PATH_KEY_ZOOM_IN              ACCEL_PATH_ROOT "ViewZoomIn"
+ #define ACCEL_PATH_KEY_ZOOM_NORMAL          ACCEL_PATH_ROOT "ViewZoom100"
+@@ -176,6 +178,7 @@ static KeyEntry view_entries[] = {
+ };
+ 
+ static KeyEntry terminal_entries[] = {
++  ENTRY (N_("Set Title"),       KEY_SET_TERMINAL_TITLE, "set-title", NULL, NULL   ),
+   ENTRY (N_("Reset"),           KEY_RESET,              "reset",     "b",  "false"),
+   ENTRY (N_("Reset and Clear"), KEY_RESET_AND_CLEAR,    "reset",     "b",  "true" ),
+ };
+diff --git a/src/terminal-window.c b/src/terminal-window.c
+index 494a3ff5fca9..ece695d0c9f6 100644
+--- a/src/terminal-window.c
++++ b/src/terminal-window.c
+@@ -184,6 +184,8 @@ static void view_zoom_out_callback            (GtkAction *action,
+                                                TerminalWindow *window);
+ static void view_zoom_normal_callback         (GtkAction *action,
+                                                TerminalWindow *window);
++static void terminal_set_title_callback       (GtkAction *action,
++                                               TerminalWindow *window);
+ static void terminal_add_encoding_callback    (GtkAction *action,
+                                                TerminalWindow *window);
+ static void terminal_reset_callback           (GtkAction *action,
+@@ -716,6 +718,88 @@ action_move_tab_cb (GSimpleAction *action,
+ }
+ 
+ static void
++terminal_set_title_dialog_response_cb (GtkWidget *dialog,
++                                       int response,
++                                       TerminalScreen *screen)
++{
++  if (response == GTK_RESPONSE_OK)
++    {
++      GtkEntry *entry;
++      const char *text;
++
++      entry = GTK_ENTRY (g_object_get_data (G_OBJECT (dialog), "title-entry"));
++      text = gtk_entry_get_text (entry);
++      terminal_screen_set_user_title (screen, text);
++    }
++
++  gtk_widget_destroy (dialog);
++}
++
++static void
++action_set_title_cb (GSimpleAction *action,
++                     GVariant *parameter,
++                     gpointer user_data)
++{
++  TerminalWindow *window = user_data;
++  TerminalWindowPrivate *priv = window->priv;
++  GtkWidget *dialog, *message_area, *hbox, *label, *entry;
++
++  if (priv->active_screen == NULL)
++    return;
++
++  /* FIXME: hook the screen up so this dialogue closes if the terminal screen closes */
++
++  dialog = gtk_message_dialog_new (GTK_WINDOW (window),
++                                   GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
++                                   GTK_MESSAGE_OTHER,
++                                   GTK_BUTTONS_OK_CANCEL,
++                                   "%s", "");
++
++  gtk_window_set_title (GTK_WINDOW (dialog), _("Set Title"));
++  gtk_window_set_resizable (GTK_WINDOW (dialog), FALSE);
++  gtk_window_set_role (GTK_WINDOW (dialog), "gnome-terminal-change-title");
++  gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
++  /* Alternative button order was set automatically by GtkMessageDialog */
++
++  g_signal_connect (dialog, "response",
++                    G_CALLBACK (terminal_set_title_dialog_response_cb), priv->active_screen);
++  g_signal_connect (dialog, "delete-event",
++                    G_CALLBACK (terminal_util_dialog_response_on_delete), NULL);
++
++  message_area = gtk_message_dialog_get_message_area (GTK_MESSAGE_DIALOG (dialog));
++  gtk_container_foreach (GTK_CONTAINER (message_area), (GtkCallback) gtk_widget_hide, NULL);
++
++  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
++  gtk_box_pack_start (GTK_BOX (message_area), hbox, FALSE, FALSE, 0);
++
++  label = gtk_label_new_with_mnemonic (_("_Title:"));
++  gtk_misc_set_alignment (GTK_MISC (label), 0.0, 0.5);
++  gtk_box_pack_start (GTK_BOX (hbox), label, FALSE, FALSE, 0);
++
++  entry = gtk_entry_new ();
++  gtk_entry_set_width_chars (GTK_ENTRY (entry), 32);
++  gtk_entry_set_activates_default (GTK_ENTRY (entry), TRUE);
++  gtk_label_set_mnemonic_widget (GTK_LABEL (label), entry);
++  gtk_box_pack_start (GTK_BOX (hbox), entry, TRUE, TRUE, 0);
++  gtk_widget_show_all (hbox);
++
++  gtk_widget_grab_focus (entry);
++  gtk_entry_set_text (GTK_ENTRY (entry), terminal_screen_get_user_title (priv->active_screen));
++  gtk_editable_select_region (GTK_EDITABLE (entry), 0, -1);
++  g_object_set_data (G_OBJECT (dialog), "title-entry", entry);
++
++  gtk_window_present (GTK_WINDOW (dialog));
++}
++
++static void
++terminal_set_title_callback (GtkAction *action,
++                             TerminalWindow *window)
++{
++  g_action_activate (g_action_map_lookup_action (G_ACTION_MAP (window), "set-title"),
++                     NULL);
++}
++
++static void
+ action_zoom_cb (GSimpleAction *action,
+                 GVariant *parameter,
+                 gpointer user_data)
+@@ -2369,6 +2453,7 @@ terminal_window_init (TerminalWindow *window)
+     { "reset",               action_reset_cb,          "b",    NULL, NULL },
+     { "switch-tab",          action_switch_tab_cb,     "i",    NULL, NULL },
+     { "move-tab",            action_move_tab_cb,       "i",    NULL, NULL },
++    { "set-title",           action_set_title_cb,      NULL,   NULL, NULL },
+     { "zoom",                action_zoom_cb,           "i",    NULL, NULL },
+     { "detach-tab",          action_detach_tab_cb,     NULL,   NULL, NULL },
+     { "find",                action_find_cb,           "s",    NULL, NULL },
+@@ -2471,6 +2556,9 @@ terminal_window_init (TerminalWindow *window)
+ 
+       /* Terminal menu */
+       { "TerminalProfiles", NULL, N_("Change _Profile") },
++      { "TerminalSetTitle", NULL, N_("_Set Title…"), NULL,
++        NULL,
++        G_CALLBACK (terminal_set_title_callback) },
+       { "TerminalSetEncoding", NULL, N_("Set _Character Encoding") },
+       { "TerminalReset", NULL, N_("_Reset"), NULL,
+         NULL,
+diff --git a/src/terminal.xml b/src/terminal.xml
+index 5dc51a84a392..a4933e4a919b 100644
+--- a/src/terminal.xml
++++ b/src/terminal.xml
+@@ -48,6 +48,7 @@
+     </menu>
+     <menu action="Terminal">
+       <menu action="TerminalProfiles" />
++      <menuitem action="TerminalSetTitle" />
+       <menu action="TerminalSetEncoding" >
+         <placeholder name="EncodingsPH" />
+         <separator />
+@@ -107,6 +108,8 @@
+     <menuitem action="TabsMoveLeft"/>
+     <menuitem action="TabsMoveRight"/>
+     <separator />
++    <menuitem action="TerminalSetTitle" />
++    <separator />
+     <menuitem action="FileCloseTab"/>
+   </popup>  
+ </ui>
+-- 
+2.5.5
+
+
+From d48bd74e54438ee8f94b16c86a575f5304372d06 Mon Sep 17 00:00:00 2001
+From: Debarshi Ray <debarshir@gnome.org>
+Date: Thu, 30 Jun 2016 18:14:36 +0200
+Subject: [PATCH 5/6] screen: Style fix
+
+This brings the code in line with how it was before
+de0dc7c2649c42e2aa02a66e4be27d262b34452d
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1296110
+---
+ src/terminal-screen.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/terminal-screen.c b/src/terminal-screen.c
+index 26201297d611..57ed6e8499d3 100644
+--- a/src/terminal-screen.c
++++ b/src/terminal-screen.c
+@@ -642,7 +642,7 @@ terminal_screen_new (GSettings       *profile,
+   /* If given an initial title, strip it of control characters and
+    * feed it to the terminal.
+    */
+-  if (title != NULL) {
++  if (title) {
+     GString *seq;
+     const char *p;
+ 
+-- 
+2.5.5
+
+
+From c7e3775ed160641155e6d1250a1a4c86cb26dcd0 Mon Sep 17 00:00:00 2001
+From: Debarshi Ray <debarshir@gnome.org>
+Date: Thu, 30 Jun 2016 16:58:15 +0200
+Subject: [PATCH 6/6] Restore the rest of the title handling options and make
+ it all work
+
+This reverts commit f27bf0135a2d18ba22158d28bf1f8c5f6ec066c8 and makes
+it use the user_title API instead of sending an escape sequence.
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1296110
+---
+ src/migration.c                    |   4 +
+ src/org.gnome.Terminal.gschema.xml |  12 ++
+ src/profile-editor.c               |   8 +
+ src/profile-preferences.ui         |  48 +++++-
+ src/terminal-enums.h               |   8 +
+ src/terminal-schemas.h             |   1 +
+ src/terminal-screen.c              | 327 ++++++++++++++++++++++++++++---------
+ src/terminal-screen.h              |   8 +-
+ src/terminal-window.c              |  11 +-
+ 9 files changed, 347 insertions(+), 80 deletions(-)
+
+diff --git a/src/migration.c b/src/migration.c
+index 3040ea5cbe67..88989115f0fb 100644
+--- a/src/migration.c
++++ b/src/migration.c
+@@ -86,6 +86,7 @@ enum {
+ #define KEY_SCROLL_ON_KEYSTROKE "scroll_on_keystroke"
+ #define KEY_SCROLL_ON_OUTPUT "scroll_on_output"
+ #define KEY_SILENT_BELL "silent_bell"
++#define KEY_TITLE_MODE "title_mode"
+ #define KEY_TITLE "title"
+ #define KEY_UPDATE_RECORDS "update_records"
+ #define KEY_USE_CUSTOM_COMMAND "use_custom_command"
+@@ -394,6 +395,9 @@ migrate_profile (TerminalSettingsList *list,
+   migrate_bool (client, path, KEY_BOLD_COLOR_SAME_AS_FG,
+                 settings, TERMINAL_PROFILE_BOLD_COLOR_SAME_AS_FG_KEY,
+                 FALSE);
++  migrate_genum (client, path, KEY_TITLE_MODE,
++                 settings, TERMINAL_PROFILE_TITLE_MODE_KEY,
++                 TERMINAL_TYPE_TITLE_MODE);
+   migrate_string (client, path, KEY_TITLE,
+                   settings, TERMINAL_PROFILE_TITLE_KEY);
+   migrate_bool (client, path, KEY_ALLOW_BOLD,
+diff --git a/src/org.gnome.Terminal.gschema.xml b/src/org.gnome.Terminal.gschema.xml
+index 2f776e3a2707..3a82ce0f6b0d 100644
+--- a/src/org.gnome.Terminal.gschema.xml
++++ b/src/org.gnome.Terminal.gschema.xml
+@@ -24,6 +24,13 @@
+ -->
+ <schemalist gettext-domain="gnome-terminal">
+ 
++  <enum id='org.gnome.Terminal.TitleMode'>
++    <value nick='replace' value='0'/>
++    <value nick='before' value='1'/>
++    <value nick='after' value='2'/>
++    <value nick='ignore' value='3'/>
++  </enum>
++
+    <enum id='org.gnome.Terminal.NewTerminalMode'>
+     <value nick='window' value='0'/>
+     <value nick='tab' value='1'/>
+@@ -116,6 +123,11 @@
+       <summary>Whether bold text should use the same color as normal text</summary>
+       <description>If true, boldface text will be rendered using the same color as normal text.</description>
+     </key>
++    <key name="title-mode" enum="org.gnome.Terminal.TitleMode">
++      <default>'replace'</default>
++      <summary>What to do with dynamic title</summary>
++      <description>If the application in the terminal sets the title (most typically people have their shell set up to do this), the dynamically-set title can erase the configured title, go before it, go after it, or replace it. The possible values are "replace", "before", "after", and "ignore".</description>
++    </key>
+     <key name="title" type="s">
+       <default l10n="messages" context="title">'Terminal'</default>
+       <summary>Title for terminal</summary>
+diff --git a/src/profile-editor.c b/src/profile-editor.c
+index 28afae23ddc8..a15eb09ba70a 100644
+--- a/src/profile-editor.c
++++ b/src/profile-editor.c
+@@ -1044,6 +1044,14 @@ terminal_profile_edit (GSettings  *profile,
+   g_settings_bind (profile, TERMINAL_PROFILE_TITLE_KEY,
+                    gtk_builder_get_object (builder, "title-entry"), "text",
+                    G_SETTINGS_BIND_GET | G_SETTINGS_BIND_SET);
++  g_settings_bind_with_mapping (profile, TERMINAL_PROFILE_TITLE_MODE_KEY,
++                                gtk_builder_get_object (builder,
++                                                        "title-mode-combobox"),
++                                "active",
++                                G_SETTINGS_BIND_GET | G_SETTINGS_BIND_SET,
++                                (GSettingsBindGetMapping) string_to_enum,
++                                (GSettingsBindSetMapping) enum_to_string,
++                                terminal_title_mode_get_type, NULL);
+   g_settings_bind (profile, TERMINAL_PROFILE_UPDATE_RECORDS_KEY,
+                    gtk_builder_get_object (builder,
+                                            "update-records-checkbutton"),
+diff --git a/src/profile-preferences.ui b/src/profile-preferences.ui
+index 1073e95ef2a0..22ac17fda7be 100644
+--- a/src/profile-preferences.ui
++++ b/src/profile-preferences.ui
+@@ -595,7 +595,7 @@
+                                     <property name="visible">True</property>
+                                     <property name="can_focus">False</property>
+                                     <property name="xalign">0</property>
+-                                    <property name="label" translatable="yes">_Title:</property>
++                                    <property name="label" translatable="yes">Initial _title:</property>
+                                     <property name="use_underline">True</property>
+                                     <property name="justify">center</property>
+                                     <property name="mnemonic_widget">title-entry</property>
+@@ -624,6 +624,52 @@
+                                 <property name="position">0</property>
+                               </packing>
+                             </child>
++                            <child>
++                              <object class="GtkHBox" id="hbox138">
++                                <property name="visible">True</property>
++                                <property name="can_focus">False</property>
++                                <property name="spacing">12</property>
++                                <child>
++                                  <object class="GtkLabel" id="title-mode-combobox-label">
++                                    <property name="visible">True</property>
++                                    <property name="can_focus">False</property>
++                                    <property name="xalign">0</property>
++                                    <property name="label" translatable="yes">When terminal commands set their o_wn titles:</property>
++                                    <property name="use_underline">True</property>
++                                    <property name="justify">center</property>
++                                    <property name="mnemonic_widget">title-mode-combobox</property>
++                                  </object>
++                                  <packing>
++                                    <property name="expand">False</property>
++                                    <property name="fill">False</property>
++                                    <property name="position">0</property>
++                                  </packing>
++                                </child>
++                                <child>
++                                  <object class="GtkComboBox" id="title-mode-combobox">
++                                    <property name="visible">True</property>
++                                    <property name="can_focus">False</property>
++                                    <property name="model">model2</property>
++                                    <child>
++                                      <object class="GtkCellRendererText" id="renderer2"/>
++                                      <attributes>
++                                        <attribute name="text">0</attribute>
++                                      </attributes>
++                                    </child>
++                                  </object>
++                                  <packing>
++                                    <property name="expand">False</property>
++                                    <property name="fill">True</property>
++                                    <property name="position">1</property>
++                                  </packing>
++                                </child>
++                              </object>
++                              <packing>
++                                <property name="expand">False</property>
++                                <property name="fill">True</property>
++                                <property name="position">1</property>
++                              </packing>
++                            </child>
+                           </object>
+                         </child>
+                       </object>
+diff --git a/src/terminal-enums.h b/src/terminal-enums.h
+index 6b85923e72cf..c85f529ca3fb 100644
+--- a/src/terminal-enums.h
++++ b/src/terminal-enums.h
+@@ -31,6 +31,14 @@ typedef enum {
+ 
+ typedef enum
+ {
++  TERMINAL_TITLE_REPLACE,
++  TERMINAL_TITLE_BEFORE,
++  TERMINAL_TITLE_AFTER,
++  TERMINAL_TITLE_IGNORE
++} TerminalTitleMode;
++
++typedef enum 
++{
+   TERMINAL_EXIT_CLOSE,
+   TERMINAL_EXIT_RESTART,
+   TERMINAL_EXIT_HOLD
+diff --git a/src/terminal-schemas.h b/src/terminal-schemas.h
+index 2e836b260c17..e5b202d79ad4 100644
+--- a/src/terminal-schemas.h
++++ b/src/terminal-schemas.h
+@@ -56,6 +56,7 @@ G_BEGIN_DECLS
+ #define TERMINAL_PROFILE_SCROLLBAR_POLICY_KEY           "scrollbar-policy"
+ #define TERMINAL_PROFILE_SCROLL_ON_KEYSTROKE_KEY        "scroll-on-keystroke"
+ #define TERMINAL_PROFILE_SCROLL_ON_OUTPUT_KEY           "scroll-on-output"
++#define TERMINAL_PROFILE_TITLE_MODE_KEY                 "title-mode"
+ #define TERMINAL_PROFILE_TITLE_KEY                      "title"
+ #define TERMINAL_PROFILE_UPDATE_RECORDS_KEY             "update-records"
+ #define TERMINAL_PROFILE_USE_CUSTOM_COMMAND_KEY         "use-custom-command"
+diff --git a/src/terminal-screen.c b/src/terminal-screen.c
+index 57ed6e8499d3..46aeaa27cc60 100644
+--- a/src/terminal-screen.c
++++ b/src/terminal-screen.c
+@@ -77,12 +77,16 @@ struct _TerminalScreenPrivate
+   GSettings *profile; /* never NULL */
+   guint profile_changed_id;
+   guint profile_forgotten_id;
+-  char *title;
++  char *raw_title, *raw_icon_title;
++  char *cooked_title, *cooked_icon_title;
++  char *override_title;
++  gboolean icon_title_set;
+   char *initial_working_directory;
+   char **initial_env;
+   char **override_command;
+   gboolean shell;
+   int child_pid;
++  gboolean user_title; /* title was manually set */
+   GSList *match_tags;
+   guint launch_child_source_id;
+ };
+@@ -102,7 +106,6 @@ enum {
+   PROP_ICON_TITLE,
+   PROP_ICON_TITLE_SET,
+   PROP_TITLE,
+-  PROP_DESCRIPTION,
+   PROP_INITIAL_ENVIRONMENT
+ };
+ 
+@@ -146,6 +149,11 @@ static void terminal_screen_icon_title_changed        (VteTerminal *vte_terminal
+ 
+ static void update_color_scheme                      (TerminalScreen *screen);
+ 
++static gboolean terminal_screen_format_title (TerminalScreen *screen, const char *raw_title, char **old_cooked_title);
++
++static void terminal_screen_cook_title      (TerminalScreen *screen);
++static void terminal_screen_cook_icon_title (TerminalScreen *screen);
++
+ static char* terminal_screen_check_match       (TerminalScreen            *screen,
+                                                 GdkEvent                  *event,
+                                                 int                  *flavor);
+@@ -344,6 +352,9 @@ terminal_screen_init (TerminalScreen *screen)
+   gtk_target_table_free (targets, n_targets);
+   gtk_target_list_unref (target_list);
+ 
++  priv->override_title = NULL;
++  priv->user_title = FALSE;
++  
+   g_signal_connect (screen, "window-title-changed",
+                     G_CALLBACK (terminal_screen_window_title_changed),
+                     screen);
+@@ -389,9 +400,6 @@ terminal_screen_get_property (GObject *object,
+       case PROP_TITLE:
+         g_value_set_string (value, terminal_screen_get_title (screen));
+         break;
+-      case PROP_DESCRIPTION:
+-        g_value_take_string (value, terminal_screen_get_description (screen));
+-        break;
+       default:
+         G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+         break;
+@@ -417,7 +425,6 @@ terminal_screen_set_property (GObject *object,
+       case PROP_ICON_TITLE:
+       case PROP_ICON_TITLE_SET:
+       case PROP_TITLE:
+-      case PROP_DESCRIPTION:
+         /* not writable */
+       default:
+         G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+@@ -516,13 +523,6 @@ terminal_screen_class_init (TerminalScreenClass *klass)
+                           NULL,
+                           G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_STATIC_NICK | G_PARAM_STATIC_BLURB));
+ 
+-  g_object_class_install_property (object_class,
+-                                   PROP_DESCRIPTION,
+-                                   g_param_spec_string ("description", NULL, NULL,
+-                                                        NULL,
+-                                                        G_PARAM_READABLE | 
+-                                                        G_PARAM_STATIC_STRINGS));
+-
+   g_object_class_install_property
+     (object_class,
+      PROP_INITIAL_ENVIRONMENT,
+@@ -605,7 +605,11 @@ terminal_screen_finalize (GObject *object)
+ 
+   terminal_screen_set_profile (screen, NULL);
+ 
+-  g_free (priv->title);
++  g_free (priv->raw_title);
++  g_free (priv->cooked_title);
++  g_free (priv->override_title);
++  g_free (priv->raw_icon_title);
++  g_free (priv->cooked_icon_title);
+   g_free (priv->initial_working_directory);
+   g_strfreev (priv->override_command);
+   g_strfreev (priv->initial_env);
+@@ -639,28 +643,8 @@ terminal_screen_new (GSettings       *profile,
+                          g_settings_get_int (profile, TERMINAL_PROFILE_DEFAULT_SIZE_COLUMNS_KEY),
+                          g_settings_get_int (profile, TERMINAL_PROFILE_DEFAULT_SIZE_ROWS_KEY));
+ 
+-  /* If given an initial title, strip it of control characters and
+-   * feed it to the terminal.
+-   */
+-  if (title) {
+-    GString *seq;
+-    const char *p;
+-
+-    seq = g_string_new ("\033]0;");
+-    for (p = title; *p; p = g_utf8_next_char (p)) {
+-      gunichar c = g_utf8_get_char (p);
+-      if (c < 0x20 || (c >= 0x7f && c <= 0x9f))
+-        continue;
+-      else if (c == ';')
+-        break;
+-
+-      g_string_append_unichar (seq, c);
+-    }
+-    g_string_append (seq, "\033\\");
+-
+-    vte_terminal_feed (VTE_TERMINAL (screen), seq->str, seq->len);
+-    g_string_free (seq, TRUE);
+-  }
++  if (title)
++    terminal_screen_set_override_title (screen, title);
+ 
+   priv->initial_working_directory = g_strdup (working_dir);
+ 
+@@ -716,45 +700,174 @@ terminal_screen_exec (TerminalScreen *screen,
+ }
+ 
+ const char*
++terminal_screen_get_raw_title (TerminalScreen *screen)
++{
++  TerminalScreenPrivate *priv = screen->priv;
++  
++  if (priv->raw_title)
++    return priv->raw_title;
++
++  return "";
++}
++
++const char*
+ terminal_screen_get_title (TerminalScreen *screen)
+ {
+-  return vte_terminal_get_window_title (VTE_TERMINAL (screen));
++  TerminalScreenPrivate *priv = screen->priv;
++  
++  if (priv->cooked_title == NULL)
++    terminal_screen_cook_title (screen);
++
++  /* cooked_title may still be NULL */
++  if (priv->cooked_title != NULL)
++    return priv->cooked_title;
++  else
++    return "";
+ }
+ 
+ const char*
+ terminal_screen_get_icon_title (TerminalScreen *screen)
+ {
+-  return vte_terminal_get_icon_title (VTE_TERMINAL (screen));
++  TerminalScreenPrivate *priv = screen->priv;
++  
++  if (priv->cooked_icon_title == NULL)
++    terminal_screen_cook_icon_title (screen);
++
++  /* cooked_icon_title may still be NULL */
++  if (priv->cooked_icon_title != NULL)
++    return priv->cooked_icon_title;
++  else
++    return "";
+ }
+ 
+ gboolean
+ terminal_screen_get_icon_title_set (TerminalScreen *screen)
+ {
+-  return vte_terminal_get_icon_title (VTE_TERMINAL (screen)) != NULL;
++  return screen->priv->icon_title_set;
+ }
+ 
+-char *
+-terminal_screen_get_description (TerminalScreen *screen)
++/* Supported format specifiers:
++ * %S = static title
++ * %D = dynamic title
++ * %A = dynamic title, falling back to static title if empty
++ * %- = separator, if not at start or end of string (excluding whitespace)
++ */
++static const char *
++terminal_screen_get_title_format (TerminalScreen *screen)
+ {
+   TerminalScreenPrivate *priv = screen->priv;
+-  gs_free char *title_string = NULL;
+-  const char *title;
++  static const char *formats[] = {
++    "%A"      /* TERMINAL_TITLE_REPLACE */,
++    "%D%-%S"  /* TERMINAL_TITLE_BEFORE  */,
++    "%S%-%D"  /* TERMINAL_TITLE_AFTER   */,
++    "%S"      /* TERMINAL_TITLE_IGNORE  */
++  };
++
++  return formats[g_settings_get_enum (priv->profile, TERMINAL_PROFILE_TITLE_MODE_KEY)];
++}
++
++/**
++ * terminal_screen_format_title::
++ * @screen:
++ * @raw_title: main ingredient
++ * @titleptr <inout>: pointer of the current title string
++ * 
++ * Format title according @format, and stores it in <literal>*titleptr</literal>.
++ * Always ensures that *titleptr will be non-NULL.
++ *
++ * Returns: %TRUE iff the title changed
++ */
++static gboolean
++terminal_screen_format_title (TerminalScreen *screen,
++                              const char *raw_title,
++                              char **titleptr)
++{
++  TerminalScreenPrivate *priv = screen->priv;
++  gs_free char *static_title_string = NULL;
++  const char *format, *arg;
++  const char *static_title = NULL;
++  GString *title;
++  gboolean add_sep = FALSE;
++
++  g_assert (titleptr);
+ 
+   /* use --title argument if one was supplied, otherwise ask the profile */
+-  if (priv->title)
+-    title = priv->title;
++  if (priv->override_title)
++    static_title = priv->override_title;
+   else
+-    title = title_string = g_settings_get_string (priv->profile, TERMINAL_PROFILE_TITLE_KEY);
++    static_title = static_title_string = g_settings_get_string (priv->profile, TERMINAL_PROFILE_TITLE_KEY);
++
++  title = g_string_sized_new (128);
++
++  format = terminal_screen_get_title_format (screen);
++  for (arg = format; *arg; arg += 2)
++    {
++      const char *text_to_append = NULL;
++
++      g_assert (arg[0] == '%');
++
++      switch (arg[1])
++        {
++          case 'A':
++            text_to_append = raw_title ? raw_title : static_title;
++            break;
++          case 'D':
++            text_to_append = raw_title;
++            break;
++          case 'S':
++            text_to_append = static_title;
++            break;
++          case '-':
++            text_to_append = NULL;
++            add_sep = TRUE;
++            break;
++          default:
++            g_assert_not_reached ();
++        }
++
++      if (!text_to_append || !text_to_append[0])
++        continue;
++
++      if (add_sep && title->len > 0)
++        g_string_append (title, " - ");
++
++      g_string_append (title, text_to_append);
++      add_sep = FALSE;
++    }
++
++  if (*titleptr == NULL || strcmp (title->str, *titleptr) != 0)
++    {
++      g_free (*titleptr);
++      *titleptr = g_string_free (title, FALSE);
++      return TRUE;
++    }
++
++  g_string_free (title, TRUE);
++  return FALSE;
++}
+ 
+-  return g_strdup_printf ("%s — %d",
+-                          title && title[0] ? title : _("Terminal"),
+-                          screen->priv->child_pid);
++static void 
++terminal_screen_cook_title (TerminalScreen *screen)
++{
++  TerminalScreenPrivate *priv = screen->priv;
++  
++  if (terminal_screen_format_title (screen, priv->raw_title, &priv->cooked_title))
++    g_object_notify (G_OBJECT (screen), "title");
++}
++
++static void 
++terminal_screen_cook_icon_title (TerminalScreen *screen)
++{
++  TerminalScreenPrivate *priv = screen->priv;
++
++  if (terminal_screen_format_title (screen, priv->raw_icon_title, &priv->cooked_icon_title))
++    g_object_notify (G_OBJECT (screen), "icon-title");
+ }
+ 
+ static void
+ terminal_screen_profile_changed_cb (GSettings     *profile,
+                                     const char    *prop_name,
+-                                    TerminalScreen *screen)
++                                   TerminalScreen *screen)
+ {
+   TerminalScreenPrivate *priv = screen->priv;
+   GObject *object = G_OBJECT (screen);
+@@ -795,9 +908,11 @@ terminal_screen_profile_changed_cb (GSettings     *profile,
+     }
+ 
+   if (!prop_name ||
++      prop_name == I_(TERMINAL_PROFILE_TITLE_MODE_KEY) ||
+       prop_name == I_(TERMINAL_PROFILE_TITLE_KEY))
+     {
+-      g_object_notify (object, "description");
++      terminal_screen_cook_title (screen);
++      terminal_screen_cook_icon_title (screen);
+     }
+ 
+   if (gtk_widget_get_realized (GTK_WIDGET (screen)) &&
+@@ -1009,7 +1124,6 @@ terminal_screen_set_profile (TerminalScreen *screen,
+     g_object_unref (old_profile);
+ 
+   g_object_notify (G_OBJECT (screen), "profile");
+-  g_object_notify (G_OBJECT (screen), "description");
+ }
+ 
+ GSettings*
+@@ -1417,8 +1531,6 @@ out:
+   g_strfreev (env);
+   free_fd_setup_data (data);
+ 
+-  g_object_notify (G_OBJECT (screen), "description");
+-
+   return result;
+ }
+ 
+@@ -1589,33 +1701,83 @@ terminal_screen_button_press (GtkWidget      *widget,
+   return FALSE;
+ }
+ 
+-void
+-terminal_screen_set_user_title (TerminalScreen *screen,
+-                                const char     *title)
++static void
++terminal_screen_set_dynamic_title (TerminalScreen *screen,
++                                   const char     *title,
++				   gboolean	  userset)
+ {
+   TerminalScreenPrivate *priv = screen->priv;
+ 
+-  g_return_if_fail (TERMINAL_IS_SCREEN (screen));
++  g_assert (TERMINAL_IS_SCREEN (screen));
++  
++  if ((priv->user_title && !userset) ||
++      (priv->raw_title && title &&
++       strcmp (priv->raw_title, title) == 0))
++    return;
++
++  g_free (priv->raw_title);
++  priv->raw_title = g_strdup (title);
++  terminal_screen_cook_title (screen);
++}
++
++static void
++terminal_screen_set_dynamic_icon_title (TerminalScreen *screen,
++                                        const char     *icon_title,
++					gboolean       userset)
++{
++  TerminalScreenPrivate *priv = screen->priv;
++  GObject *object = G_OBJECT (screen);
++  
++  g_assert (TERMINAL_IS_SCREEN (screen));
+ 
+-  if (g_strcmp0 (priv->title, title) == 0)
++  if ((priv->user_title && !userset) ||  
++      (priv->icon_title_set &&
++       priv->raw_icon_title &&
++       icon_title &&
++       strcmp (priv->raw_icon_title, icon_title) == 0))
+     return;
+ 
+-  g_free (priv->title);
+-  priv->title = title && title[0] ? g_strdup (title) : NULL;
++  g_object_freeze_notify (object);
++
++  g_free (priv->raw_icon_title);
++  priv->raw_icon_title = g_strdup (icon_title);
++  priv->icon_title_set = TRUE;
++
++  g_object_notify (object, "icon-title-set");
++  terminal_screen_cook_icon_title (screen);
+ 
+-  g_object_notify (G_OBJECT (screen), "description");
++  g_object_thaw_notify (object);
+ }
+ 
+-const char*
+-terminal_screen_get_user_title (TerminalScreen *screen)
++void
++terminal_screen_set_override_title (TerminalScreen *screen,
++                                    const char     *title)
+ {
+-  TerminalScreenPrivate *priv;
++  TerminalScreenPrivate *priv = screen->priv;
++  char *old_title;
+ 
+-  g_return_val_if_fail (TERMINAL_IS_SCREEN (screen), NULL);
++  old_title = priv->override_title;
++  priv->override_title = g_strdup (title);
++  g_free (old_title);
+ 
+-  priv = screen->priv;
++  terminal_screen_set_dynamic_title (screen, title, FALSE);
++  terminal_screen_set_dynamic_icon_title (screen, title, FALSE);
++}
+ 
+-  return priv->title ? priv->title : _("Terminal");
++const char*
++terminal_screen_get_dynamic_title (TerminalScreen *screen)
++{
++  g_return_val_if_fail (TERMINAL_IS_SCREEN (screen), NULL);
++  
++  return screen->priv->raw_title;
++}
++
++const char*
++terminal_screen_get_dynamic_icon_title (TerminalScreen *screen)
++{
++  g_return_val_if_fail (TERMINAL_IS_SCREEN (screen), NULL);
++  
++  return screen->priv->raw_icon_title;
+ }
+ 
+ /**
+@@ -1648,15 +1810,18 @@ static void
+ terminal_screen_window_title_changed (VteTerminal *vte_terminal,
+                                       TerminalScreen *screen)
+ {
+-  g_object_notify (G_OBJECT (screen), "title");
++  terminal_screen_set_dynamic_title (screen,
++                                     vte_terminal_get_window_title (vte_terminal),
++				     FALSE);
+ }
+ 
+ static void
+ terminal_screen_icon_title_changed (VteTerminal *vte_terminal,
+                                     TerminalScreen *screen)
+ {
+-  g_object_notify (G_OBJECT (screen), "icon-title");
+-  g_object_notify (G_OBJECT (screen), "icon-title-set");
++  terminal_screen_set_dynamic_icon_title (screen,
++                                          vte_terminal_get_icon_title (vte_terminal),
++					  FALSE);
+ }
+ 
+ static void
+@@ -1675,8 +1840,6 @@ terminal_screen_child_exited (VteTerminal *terminal,
+ 
+   priv->child_pid = -1;
+   
+-  g_object_notify (G_OBJECT (screen), "description");
+-
+   action = g_settings_get_enum (priv->profile, TERMINAL_PROFILE_EXIT_ACTION_KEY);
+   
+   switch (action)
+@@ -1720,6 +1883,24 @@ terminal_screen_child_exited (VteTerminal *terminal,
+     }
+ }
+ 
++void
++terminal_screen_set_user_title (TerminalScreen *screen,
++                                const char *text)
++{
++  TerminalScreenPrivate *priv = screen->priv;
++
++  /* The user set the title to nothing, let's understand that as a
++     request to revert to dynamically setting the title again. */
++  if (!text || !text[0])
++    priv->user_title = FALSE;
++  else
++    {
++      priv->user_title = TRUE;
++      terminal_screen_set_dynamic_title (screen, text, TRUE);
++      terminal_screen_set_dynamic_icon_title (screen, text, TRUE);
++    }
++}
++
+ static void
+ terminal_screen_drag_data_received (GtkWidget        *widget,
+                                     GdkDragContext   *context,
+diff --git a/src/terminal-screen.h b/src/terminal-screen.h
+index d0341c8a0438..871ecffd673e 100644
+--- a/src/terminal-screen.h
++++ b/src/terminal-screen.h
+@@ -101,15 +101,19 @@ void         terminal_screen_set_initial_environment (TerminalScreen  *screen,
+                                                       char           **argv);
+ char **      terminal_screen_get_initial_environment (TerminalScreen  *screen);
+ 
+-const char *terminal_screen_get_user_title     (TerminalScreen *screen);
++const char* terminal_screen_get_raw_title      (TerminalScreen *screen);
+ const char* terminal_screen_get_title          (TerminalScreen *screen);
+ const char* terminal_screen_get_icon_title     (TerminalScreen *screen);
+ gboolean    terminal_screen_get_icon_title_set (TerminalScreen *screen);
+-char *      terminal_screen_get_description    (TerminalScreen *screen);
+ 
+ void terminal_screen_set_user_title (TerminalScreen *screen,
+                                      const char *text);
+ 
++void        terminal_screen_set_override_title     (TerminalScreen *screen,
++                                                    const char     *title);
++
++const char *terminal_screen_get_dynamic_title      (TerminalScreen *screen);
++const char *terminal_screen_get_dynamic_icon_title (TerminalScreen *screen);
+ 
+ char *terminal_screen_get_current_dir (TerminalScreen *screen);
+ 
+diff --git a/src/terminal-window.c b/src/terminal-window.c
+index ece695d0c9f6..ed7bcb52044e 100644
+--- a/src/terminal-window.c
++++ b/src/terminal-window.c
+@@ -735,6 +735,12 @@ terminal_set_title_dialog_response_cb (GtkWidget *dialog,
+   gtk_widget_destroy (dialog);
+ }
+ 
++static const char *
++terminal_screen_get_user_title (TerminalScreen *screen)
++{
++  return terminal_screen_get_raw_title (screen);
++}
++
+ static void
+ action_set_title_cb (GSimpleAction *action,
+                      GVariant *parameter,
+@@ -3043,14 +3049,11 @@ sync_screen_title (TerminalScreen *screen,
+                    TerminalWindow *window)
+ {
+   TerminalWindowPrivate *priv = window->priv;
+-  const char *title;
+   
+   if (screen != priv->active_screen)
+     return;
+ 
+-  title = terminal_screen_get_title (screen);
+-  gtk_window_set_title (GTK_WINDOW (window), 
+-                        title && title[0] ? title : _("Terminal"));
++  gtk_window_set_title (GTK_WINDOW (window), terminal_screen_get_title (screen));
+ }
+ 
+ static void
+-- 
+2.5.5
+

@@ -1,0 +1,187 @@
+From d0ed2c2b4911c0b533a1a41b208b53ee8fbef21f Mon Sep 17 00:00:00 2001
+From: Debarshi Ray <debarshir@gnome.org>
+Date: Tue, 10 Mar 2015 12:47:37 +0100
+Subject: [PATCH] Make the ActiveTerminal field in the config file format work
+
+https://bugzilla.gnome.org/show_bug.cgi?id=745958
+---
+ src/client.vapi             | 1 +
+ src/gterminal.vala          | 1 +
+ src/terminal-client-utils.c | 5 +++++
+ src/terminal-client-utils.h | 1 +
+ src/terminal-gdbus.c        | 9 +++++----
+ src/terminal-nautilus.c     | 1 +
+ src/terminal-options.c      | 6 ++++++
+ src/terminal.c              | 5 +----
+ 8 files changed, 21 insertions(+), 8 deletions(-)
+
+diff --git a/src/client.vapi b/src/client.vapi
+index 7eed2bf..ff8680d 100644
+--- a/src/client.vapi
++++ b/src/client.vapi
+@@ -25,6 +25,7 @@ namespace Terminal.Client {
+                                               string? role,
+                                               string? profile,
+                                               string? title,
++                                              bool active,
+                                               bool maximise_window,
+                                               bool fullscreen_window);
+ 
+diff --git a/src/gterminal.vala b/src/gterminal.vala
+index 7e55678..96d99d4 100644
+--- a/src/gterminal.vala
++++ b/src/gterminal.vala
+@@ -416,6 +416,7 @@ namespace GTerminal
+                                                     OpenOptions.role,
+                                                     OpenOptions.profile,
+                                                     null /* title */,
++                                                    true,
+                                                     OpenOptions.maximise,
+                                                     OpenOptions.fullscreen);
+     if (OpenOptions.show_menubar_set)
+diff --git a/src/terminal-client-utils.c b/src/terminal-client-utils.c
+index 1a7c00f..3a5024e 100644
+--- a/src/terminal-client-utils.c
++++ b/src/terminal-client-utils.c
+@@ -55,6 +55,7 @@ terminal_client_append_create_instance_options (GVariantBuilder *builder,
+                                                 const char      *role,
+                                                 const char      *profile,
+                                                 const char      *title,
++                                                gboolean         active,
+                                                 gboolean         maximise_window,
+                                                 gboolean         fullscreen_window)
+ {
+@@ -80,6 +81,10 @@ terminal_client_append_create_instance_options (GVariantBuilder *builder,
+                            "role", g_variant_new_string (role));
+ 
+   /* Boolean options */
++  if (active)
++    g_variant_builder_add (builder, "{sv}",
++                           "active", g_variant_new_boolean (active));
++
+   if (maximise_window)
+     g_variant_builder_add (builder, "{sv}", 
+                            "maximize-window", g_variant_new_boolean (TRUE));
+diff --git a/src/terminal-client-utils.h b/src/terminal-client-utils.h
+index 57d711a..6489601 100644
+--- a/src/terminal-client-utils.h
++++ b/src/terminal-client-utils.h
+@@ -30,6 +30,7 @@ void terminal_client_append_create_instance_options (GVariantBuilder *builder,
+                                                      const char      *role,
+                                                      const char      *profile,
+                                                      const char      *title,
++                                                     gboolean         active,
+                                                      gboolean         maximise_window,
+                                                      gboolean         fullscreen_window);
+ 
+diff --git a/src/terminal-gdbus.c b/src/terminal-gdbus.c
+index 7b68a85..90597d4 100644
+--- a/src/terminal-gdbus.c
++++ b/src/terminal-gdbus.c
+@@ -373,7 +373,7 @@ terminal_factory_impl_create_instance (TerminalFactory *factory,
+   gdouble zoom = 1.0;
+   guint window_id;
+   gboolean show_menubar;
+-  gboolean active = TRUE;
++  gboolean active;
+   gboolean have_new_window, present_window, present_window_set;
+   GError *err = NULL;
+ 
+@@ -462,8 +462,6 @@ terminal_factory_impl_create_instance (TerminalFactory *factory,
+   screen = terminal_screen_new (profile, NULL, NULL, NULL,
+                                 zoom_set ? zoom : 1.0);
+   terminal_window_add_screen (window, screen, -1);
+-  terminal_window_switch_screen (window, screen);
+-  gtk_widget_grab_focus (GTK_WIDGET (screen));
+ 
+   object_path = get_object_path_for_screen (window, screen);
+   g_assert (g_variant_is_object_path (object_path));
+@@ -480,8 +478,11 @@ terminal_factory_impl_create_instance (TerminalFactory *factory,
+   g_signal_connect (screen, "destroy",
+                     G_CALLBACK (screen_destroy_cb), app);
+ 
+-  if (active)
++  if (g_variant_lookup (options, "active", "b", &active) &&
++      active) {
+     terminal_window_switch_screen (window, screen);
++    gtk_widget_grab_focus (GTK_WIDGET (screen));
++  }
+ 
+   if (g_variant_lookup (options, "present-window", "b", &present_window))
+     present_window_set = TRUE;
+diff --git a/src/terminal-nautilus.c b/src/terminal-nautilus.c
+index 3474783..53fbf9f 100644
+--- a/src/terminal-nautilus.c
++++ b/src/terminal-nautilus.c
+@@ -383,6 +383,7 @@ create_terminal (ExecData *data /* transfer full */)
+                                                   NULL /* role */,
+                                                   NULL /* use default profile */,
+                                                   NULL /* title */,
++                                                  TRUE, /* active */
+                                                   FALSE /* maximised */,
+                                                   FALSE /* fullscreen */);
+ 
+diff --git a/src/terminal-options.c b/src/terminal-options.c
+index 0280f11..d12b2d7 100644
+--- a/src/terminal-options.c
++++ b/src/terminal-options.c
+@@ -865,6 +865,7 @@ terminal_options_merge_config (TerminalOptions *options,
+   for (i = 0; groups[i]; ++i)
+     {
+       const char *window_group = groups[i];
++      char *active_terminal;
+       char **tab_groups;
+       InitialWindow *iw;
+       guint j;
+@@ -877,6 +878,7 @@ terminal_options_merge_config (TerminalOptions *options,
+       initial_windows = g_list_append (initial_windows, iw);
+       apply_defaults (options, iw);
+ 
++      active_terminal = g_key_file_get_string (key_file, window_group, TERMINAL_CONFIG_WINDOW_PROP_ACTIVE_TAB, NULL);
+       iw->role = g_key_file_get_string (key_file, window_group, TERMINAL_CONFIG_WINDOW_PROP_ROLE, NULL);
+       iw->geometry = g_key_file_get_string (key_file, window_group, TERMINAL_CONFIG_WINDOW_PROP_GEOMETRY, NULL);
+       iw->start_fullscreen = g_key_file_get_boolean (key_file, window_group, TERMINAL_CONFIG_WINDOW_PROP_FULLSCREEN, NULL);
+@@ -898,6 +900,9 @@ terminal_options_merge_config (TerminalOptions *options,
+ 
+           iw->tabs = g_list_append (iw->tabs, it);
+ 
++          if (g_strcmp0 (active_terminal, tab_group) == 0)
++            it->active = TRUE;
++
+ /*          it->width = g_key_file_get_integer (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_WIDTH, NULL);
+           it->height = g_key_file_get_integer (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_HEIGHT, NULL);*/
+           it->working_dir = terminal_util_key_file_get_string_unescape (key_file, tab_group, TERMINAL_CONFIG_TERMINAL_PROP_WORKING_DIRECTORY, NULL);
+@@ -910,6 +915,7 @@ terminal_options_merge_config (TerminalOptions *options,
+             }
+         }
+ 
++      g_free (active_terminal);
+       g_strfreev (tab_groups);
+ 
+       if (have_error)
+diff --git a/src/terminal.c b/src/terminal.c
+index b6a6f5e..296d381 100644
+--- a/src/terminal.c
++++ b/src/terminal.c
+@@ -103,6 +103,7 @@ handle_options (TerminalFactory *factory,
+                                                           iw->role,
+                                                           it->profile ? it->profile : options->default_profile,
+                                                           NULL /* title */,
++                                                          it->active,
+                                                           iw->start_maximized,
+                                                           iw->start_fullscreen);
+ 
+@@ -120,10 +121,6 @@ handle_options (TerminalFactory *factory,
+           if (iw->force_menubar_state)
+             g_variant_builder_add (&builder, "{sv}",
+                                    "show-menubar", g_variant_new_boolean (iw->menubar_state));
+-#if 0
+-          if (it->active)
+-            terminal_window_switch_screen (window, screen);
+-#endif
+ 
+           if (!terminal_factory_call_create_instance_sync 
+                  (factory,
+-- 
+2.1.0
+
