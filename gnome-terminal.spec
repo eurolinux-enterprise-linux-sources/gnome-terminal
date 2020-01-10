@@ -1,33 +1,30 @@
 %define gettext_package gnome-terminal
 
-%define glib2_version 2.40.0
-%define gtk3_version 3.20.0
-%define vte_version 0.46.0
+%define glib2_version 2.50.0
+%define gtk3_version 3.22.27
+%define vte_version 0.52.2
 %define desktop_file_utils_version 0.2.90
 
-Summary: Terminal emulator for GNOME
 Name: gnome-terminal
-Version: 3.22.1
+Version: 3.28.2
 Release: 2%{?dist}
-License: GPLv3+ and GFDL
-Group: User Interface/Desktops
-URL: http://www.gnome.org/
-#VCS: git:git://git.gnome.org/gnome-terminal
-Source0: http://download.gnome.org/sources/gnome-terminal/3.22/gnome-terminal-%{version}.tar.xz
+Summary: Terminal emulator for GNOME
 
-Patch0:  0001-Update-Polish-translation.patch
-Patch1:  0001-search-provider-Fix-incorrect-assumption.patch
+License: GPLv3+ and GFDL
+URL: http://www.gnome.org/
+Source0: http://download.gnome.org/sources/gnome-terminal/3.28/gnome-terminal-%{version}.tar.xz
+
+Patch0: 0001-client-legacy-Fix-invalid-free.patch
 
 Patch100: %{name}-notify-open-title-transparency.patch
 
 # https://bugzilla.redhat.com/show_bug.cgi?id=1323217
 Patch101: %{name}-Revert-server-Error-out-on-unsupported-locale.patch
 
+# https://bugzilla.redhat.com/show_bug.cgi?id=1103380
 Patch102: %{name}-scroll-speed.patch
-Patch103: %{name}-don-t-treat-warnings-as-errors.patch
 
-# https://bugzilla.redhat.com/show_bug.cgi?id=1379605
-Patch104: %{name}-Update-Japanese-translations-for-RHEL.patch
+Patch103: %{name}-don-t-treat-warnings-as-errors.patch
 
 BuildRequires: glib2-devel >= %{glib2_version}
 BuildRequires: GConf2-devel
@@ -62,8 +59,8 @@ multiple terminals in a single window (tabs) and profiles support.
 Summary: GNOME Terminal extension for Nautilus
 Requires: %{name}%{?_isa} = %{version}-%{release}
 
-Provides: nautilus-gnome-terminal = %{version}-%{release}
-Obsoletes: nautilus-open-terminal < 0.20-4
+Provides: nautilus-open-terminal = %{version}-%{release}
+Obsoletes: nautilus-open-terminal < 0.20-8
 
 %description nautilus
 This package provides a Nautilus extension that adds the 'Open in Terminal'
@@ -71,17 +68,15 @@ option to the right-click context menu in Nautilus.
 
 %prep
 %setup -q
-%patch0 -p1
-%patch1 -p1
-%patch100 -p1
-%patch101 -p1
-%patch102 -p1
-%patch103 -p1
-%patch104 -p1
+%patch0 -p1 -b .client-free
+%patch100 -p1 -b .notify-open-title-transparency
+%patch101 -p1 -b .unsupported-locale
+%patch102 -p1 -b .scroll-speed
+%patch103 -p1 -b .warnings
 
 %build
-autoreconf --force --install
-%configure --disable-static --disable-gterminal --with-gtk=3.0 --with-nautilus-extension
+autoreconf -f -i
+%configure --disable-static --with-gtk=3.0 --with-nautilus-extension
 
 make %{?_smp_mflags}
 
@@ -108,7 +103,7 @@ fi
 %doc AUTHORS NEWS
 
 %{_bindir}/gnome-terminal
-%{_datadir}/appdata/org.gnome.Terminal.appdata.xml
+%{_datadir}/metainfo/org.gnome.Terminal.appdata.xml
 %{_datadir}/applications/org.gnome.Terminal.desktop
 %{_libexecdir}/gnome-terminal-migration
 %{_libexecdir}/gnome-terminal-server
@@ -119,9 +114,22 @@ fi
 
 %files nautilus
 %{_libdir}/nautilus/extensions-3.0/libterminal-nautilus.so
-%{_datadir}/appdata/org.gnome.Terminal.Nautilus.metainfo.xml
+%{_datadir}/metainfo/org.gnome.Terminal.Nautilus.metainfo.xml
 
 %changelog
+* Fri Jun 08 2018 Debarshi Ray <rishi@fedoraproject.org> - 3.28.2-2
+- Backport fix for client-side memory error (GNOME/gnome-terminal#1)
+- Bump BuildRequires versions
+- Drop the dark theme override
+- Rebase and restore the scroll speed patches
+- Rebase and restore the patch to allow old ISO 8895 charsets
+- Restore the GConf migration tool
+- Resolves: #1568632
+
+* Wed Jun 06 2018 Richard Hughes <rhughes@redhat.com> - 3.28.2-1
+- Update to 3.28.2
+- Resolves: #1568632
+
 * Thu May 25 2017 Debarshi Ray <rishi@fedoraproject.org> - 3.22.1-2
 - Update Japanese translations for RHEL
 - Resolves: #1379605

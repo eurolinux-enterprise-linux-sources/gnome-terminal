@@ -203,9 +203,30 @@ main (int argc, char **argv)
   assert_match_anchored (PORT, ":65535", ENTIRE);
   assert_match_anchored (PORT, ":65536", "");     /* TODO: can/should we totally abort here? */
 
+  /* Parentheses are only allowed in matching pairs, see bug 763980. */
   /* TODO: add tests for PATHCHARS and PATHNONTERM; and/or URLPATH */
-  assert_match_anchored (URLPATH, "/ab/cd",       ENTIRE);
-  assert_match_anchored (URLPATH, "/ab/cd.html.", "/ab/cd.html");
+  assert_match_anchored (DEFS URLPATH, "/ab/cd",       ENTIRE);
+  assert_match_anchored (DEFS URLPATH, "/ab/cd.html.", "/ab/cd.html");
+  assert_match_anchored (DEFS URLPATH, "/The_Offspring_(album)", ENTIRE);
+  assert_match_anchored (DEFS URLPATH, "/The_Offspring)", "/The_Offspring");
+  assert_match_anchored (DEFS URLPATH, "/a((b(c)d)e(f))", ENTIRE);
+  assert_match_anchored (DEFS URLPATH, "/a((b(c)d)e(f)))", "/a((b(c)d)e(f))");
+  assert_match_anchored (DEFS URLPATH, "/a(b).(c).", "/a(b).(c)");
+  assert_match_anchored (DEFS URLPATH, "/a.(b.(c.).).(d.(e.).).)", "/a.(b.(c.).).(d.(e.).)");
+  assert_match_anchored (DEFS URLPATH, "/a)b(c", "/a");
+  assert_match_anchored (DEFS URLPATH, "/.", "/");
+  assert_match_anchored (DEFS URLPATH, "/(.", "/");
+  assert_match_anchored (DEFS URLPATH, "/).", "/");
+  assert_match_anchored (DEFS URLPATH, "/().", "/()");
+  assert_match_anchored (DEFS URLPATH, "/", ENTIRE);
+  assert_match_anchored (DEFS URLPATH, "", ENTIRE);
+  assert_match_anchored (DEFS URLPATH, "/php?param[]=value1&param[]=value2", ENTIRE);
+  assert_match_anchored (DEFS URLPATH, "/foo?param1[index1]=value1&param2[index2]=value2", ENTIRE);
+  assert_match_anchored (DEFS URLPATH, "/[[[]][]]", ENTIRE);
+  assert_match_anchored (DEFS URLPATH, "/[([])]([()])", ENTIRE);
+  assert_match_anchored (DEFS URLPATH, "/([()])[([])]", ENTIRE);
+  assert_match_anchored (DEFS URLPATH, "/[(])", "/");
+  assert_match_anchored (DEFS URLPATH, "/([)]", "/");
 
 
   /* Put the components together and test the big picture */
@@ -214,6 +235,8 @@ main (int argc, char **argv)
   assert_match (REGEX_URL_AS_IS, "Visit http://example.com for details",        "http://example.com");
   assert_match (REGEX_URL_AS_IS, "Trailing dot http://foo/bar.html.",           "http://foo/bar.html");
   assert_match (REGEX_URL_AS_IS, "Trailing ellipsis http://foo/bar.html...",    "http://foo/bar.html");
+  assert_match (REGEX_URL_AS_IS, "Trailing comma http://foo/bar,baz,",          "http://foo/bar,baz");
+  assert_match (REGEX_URL_AS_IS, "Trailing semicolon http://foo/bar;baz;",      "http://foo/bar;baz");
   assert_match (REGEX_URL_AS_IS, "See <http://foo/bar>",                        "http://foo/bar");
   assert_match (REGEX_URL_AS_IS, "<http://foo.bar/asdf.qwer.html>",             "http://foo.bar/asdf.qwer.html");
   assert_match (REGEX_URL_AS_IS, "Go to http://192.168.1.1.",                   "http://192.168.1.1");
@@ -242,7 +265,7 @@ main (int argc, char **argv)
   assert_match (REGEX_URL_AS_IS, "https://[dead::beef]:12345/ipv6",     ENTIRE);
   assert_match (REGEX_URL_AS_IS, "https://[dead::beef:11.22.33.44]",    ENTIRE);
   assert_match (REGEX_URL_AS_IS, "http://1.2.3.4:",                     "http://1.2.3.4");  /* TODO: can/should we totally abort here? */
-  assert_match (REGEX_URL_AS_IS, "https://dead::beef/no-brackets-ipv6", "https://dead");    /* detto */
+  assert_match (REGEX_URL_AS_IS, "https://dead::beef/no-brackets-ipv6", "https://dead");    /* ditto */
   assert_match (REGEX_URL_AS_IS, "http://111.222.333.444/",             NULL);
   assert_match (REGEX_URL_AS_IS, "http://1.2.3.4:70000",                "http://1.2.3.4");  /* TODO: can/should we totally abort here? */
   assert_match (REGEX_URL_AS_IS, "http://[dead::beef:111.222.333.444]", NULL);
@@ -257,6 +280,20 @@ main (int argc, char **argv)
 
   assert_match (REGEX_URL_AS_IS, "http://ab.cd/ef?g=h&i=j|k=l#m=n:o=p", ENTIRE);
   assert_match (REGEX_URL_AS_IS, "http:///foo",                         NULL);
+
+  /* Parentheses are only allowed in matching pairs, see bug 763980. */
+  assert_match (REGEX_URL_AS_IS, "https://en.wikipedia.org/wiki/The_Offspring_(album)", ENTIRE);
+  assert_match (REGEX_URL_AS_IS, "[markdown](https://en.wikipedia.org/wiki/The_Offspring)", "https://en.wikipedia.org/wiki/The_Offspring");
+  assert_match (REGEX_URL_AS_IS, "[markdown](https://en.wikipedia.org/wiki/The_Offspring_(album))", "https://en.wikipedia.org/wiki/The_Offspring_(album)");
+  assert_match (REGEX_URL_AS_IS, "[markdown](http://foo.bar/(a(b)c)d)e)f", "http://foo.bar/(a(b)c)d");
+  assert_match (REGEX_URL_AS_IS, "[markdown](http://foo.bar/a)b(c", "http://foo.bar/a");
+
+  /* Apostrophes are allowed, except at trailing position if the URL is preceded by an apostrophe, see bug 448044. */
+  assert_match (REGEX_URL_AS_IS, "https://en.wikipedia.org/wiki/Moore's_law", ENTIRE);
+  assert_match (REGEX_URL_AS_IS, "<a href=\"https://en.wikipedia.org/wiki/Moore's_law\">", "https://en.wikipedia.org/wiki/Moore's_law");
+  assert_match (REGEX_URL_AS_IS, "https://en.wikipedia.org/wiki/Cryin'", ENTIRE);
+  assert_match (REGEX_URL_AS_IS, "<a href=\"https://en.wikipedia.org/wiki/Cryin'\">", "https://en.wikipedia.org/wiki/Cryin'");
+  assert_match (REGEX_URL_AS_IS, "<a href='https://en.wikipedia.org/wiki/Aerosmith'>", "https://en.wikipedia.org/wiki/Aerosmith");
 
   /* No scheme */
   assert_match (REGEX_URL_HTTP, "www.foo.bar/baz",     ENTIRE);

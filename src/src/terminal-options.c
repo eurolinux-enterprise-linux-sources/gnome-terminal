@@ -3,7 +3,7 @@
  * Copyright © 2002 Red Hat, Inc.
  * Copyright © 2002 Sun Microsystems
  * Copyright © 2003 Mariano Suarez-Alvarez
- * Copyright © 2008 Christian Persch
+ * Copyright © 2008, 2017 Christian Persch
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,12 +27,62 @@
 
 #include <glib.h>
 #include <glib/gi18n.h>
+#include <glib/gprintf.h>
 
 #include "terminal-options.h"
+#include "terminal-client-utils.h"
+#include "terminal-defines.h"
+#include "terminal-schemas.h"
 #include "terminal-screen.h"
 #include "terminal-app.h"
 #include "terminal-util.h"
 #include "terminal-version.h"
+#include "terminal-libgsystem.h"
+
+static int verbosity = 1;
+
+void
+terminal_fprintf (FILE* fp,
+                  int verbosity_level,
+                  const char* format,
+                  ...)
+{
+  if (verbosity < verbosity_level)
+    return;
+
+  va_list args;
+  va_start(args, format);
+  gs_free char *str = g_strdup_vprintf(format, args);
+  va_end(args);
+
+  gs_strfreev char **lines = g_strsplit_set(str, "\n\r", -1);
+  for (gsize i = 0; lines[i]; ++i) {
+    if (lines[i][0] != '\0')
+      g_fprintf(fp, "# %s\n", lines[i]);
+  }
+}
+
+#if GLIB_CHECK_VERSION (2, 50, 0)
+
+/* Need to install a special log writer so we never output
+ * anything without the '# ' prepended, in case --print-environment
+ * is used.
+ */
+GLogWriterOutput
+terminal_log_writer (GLogLevelFlags log_level,
+                     const GLogField *fields,
+                     gsize n_fields,
+                     gpointer user_data)
+{
+  for (gsize i = 0; i < n_fields; i++) {
+    if (g_str_equal (fields[i].key, "MESSAGE"))
+      terminal_printerr ("%s\n", (const char*)fields[i].value);
+  }
+
+  return G_LOG_WRITER_HANDLED;
+}
+
+#endif /* GLIB 2.50 */
 
 static GOptionContext *get_goption_context (TerminalOptions *options);
 
@@ -101,6 +151,8 @@ initial_tab_new (char *profile /* adopts */)
   it->zoom = 1.0;
   it->zoom_set = FALSE;
   it->active = FALSE;
+  it->fd_list = NULL;
+  it->fd_array = NULL;
 
   return it;
 }
@@ -112,6 +164,9 @@ initial_tab_free (InitialTab *it)
   g_strfreev (it->exec_argv);
   g_free (it->title);
   g_free (it->working_dir);
+  g_clear_object (&it->fd_list);
+  if (it->fd_array)
+    g_array_unref (it->fd_array);
   g_slice_free (InitialTab, it);
 }
 
@@ -137,8 +192,8 @@ initial_window_free (InitialWindow *iw)
 }
 
 static void
-apply_defaults (TerminalOptions *options,
-                InitialWindow        *iw)
+apply_window_defaults (TerminalOptions *options,
+                       InitialWindow *iw)
 {
   if (options->default_role)
     {
@@ -161,25 +216,45 @@ apply_defaults (TerminalOptions *options,
   iw->start_maximized |= options->default_maximize;
 }
 
+static void
+apply_tab_defaults (TerminalOptions *options,
+                    InitialTab *it)
+{
+  it->wait = options->default_wait;
+}
+
 static InitialWindow*
-ensure_top_window (TerminalOptions *options)
+add_new_window (TerminalOptions *options,
+                char *profile /* adopts */,
+                gboolean implicit_if_first_window)
+{
+  InitialWindow *iw;
+  InitialTab *it;
+
+  iw = initial_window_new (0);
+  iw->implicit_first_window = (options->initial_windows == NULL) && implicit_if_first_window;
+  apply_window_defaults (options, iw);
+
+  it = initial_tab_new (profile);
+  iw->tabs = g_list_prepend (NULL, it);
+  apply_tab_defaults (options, it);
+
+  options->initial_windows = g_list_append (options->initial_windows, iw);
+  return iw;
+}
+
+static InitialWindow*
+ensure_top_window (TerminalOptions *options,
+                   gboolean implicit_if_first_window)
 {
   InitialWindow *iw;
 
   if (options->initial_windows == NULL)
-    {
-      iw = initial_window_new (0);
-      iw->tabs = g_list_append (NULL, initial_tab_new (NULL));
-      apply_defaults (options, iw);
-
-      options->initial_windows = g_list_append (options->initial_windows, iw);
-    }
+    iw = add_new_window (options, NULL /* profile */, implicit_if_first_window);
   else
-    {
       iw = g_list_last (options->initial_windows)->data;
-    }
 
-  g_assert (iw->tabs);
+  g_assert_nonnull (iw->tabs);
 
   return iw;
 }
@@ -190,28 +265,13 @@ ensure_top_tab (TerminalOptions *options)
   InitialWindow *iw;
   InitialTab *it;
 
-  iw = ensure_top_window (options);
+  iw = ensure_top_window (options, TRUE);
 
-  g_assert (iw->tabs);
+  g_assert_nonnull (iw->tabs);
 
   it = g_list_last (iw->tabs)->data;
 
   return it;
-}
-
-static InitialWindow*
-add_new_window (TerminalOptions *options,
-                char            *profile /* adopts */)
-{
-  InitialWindow *iw;
-
-  iw = initial_window_new (0);
-  iw->tabs = g_list_prepend (NULL, initial_tab_new (profile));
-  apply_defaults (options, iw);
-
-  options->initial_windows = g_list_append (options->initial_windows, iw);
-
-  return iw;
 }
 
 /* handle deprecated command line options */
@@ -219,9 +279,19 @@ add_new_window (TerminalOptions *options,
 static void
 deprecated_option_warning (const gchar *option_name)
 {
-  g_printerr (_("Option \"%s\" is deprecated and might be removed in a later version of gnome-terminal."),
-              option_name);
-  g_printerr ("\n");
+  terminal_printerr (_("Option “%s” is deprecated and might be removed in a later version of gnome-terminal."),
+                     option_name);
+  terminal_printerr ("\n");
+}
+
+static void
+deprecated_command_option_warning (const char *option_name)
+{
+  deprecated_option_warning (option_name);
+
+  /* %s is being replaced with "-- " (without quotes), which must be used literally, not translatable */
+  terminal_printerr (_("Use “%s” to terminate the options and put the command line to execute after it."), "-- ");
+  terminal_printerr ("\n");
 }
 
 static gboolean
@@ -230,9 +300,9 @@ unsupported_option_callback (const gchar *option_name,
                              gpointer     data,
                              GError     **error)
 {
-  g_printerr (_("Option \"%s\" is no longer supported in this version of gnome-terminal."),
+  terminal_printerr (_("Option “%s” is no longer supported in this version of gnome-terminal."),
               option_name);
-  g_printerr ("\n");
+  terminal_printerr ("\n");
   return TRUE; /* we do not want to bail out here but continue */
 }
 
@@ -243,7 +313,7 @@ unsupported_option_fatal_callback (const gchar *option_name,
                                    GError     **error)
 {
   g_set_error (error, G_OPTION_ERROR, G_OPTION_ERROR_UNKNOWN_OPTION,
-               _("Option \"%s\" is no longer supported in this version of gnome-terminal."),
+               _("Option “%s” is no longer supported in this version of gnome-terminal."),
                option_name);
   return FALSE;
 }
@@ -255,14 +325,27 @@ option_version_cb (const gchar *option_name,
                    gpointer     data,
                    GError     **error)
 {
-  g_print ("%s %s ", _("GNOME Terminal"), VERSION);
-  g_print (_("Using VTE version %u.%u.%u"),
-           vte_get_major_version (),
-           vte_get_minor_version (),
-           vte_get_micro_version ());
-  g_print (" %s\n", vte_get_features ());
-
+  terminal_print ("GNOME Terminal %s using VTE %u.%u.%u %s\n",
+                  VERSION,
+                  vte_get_major_version (),
+                  vte_get_minor_version (),
+                  vte_get_micro_version (),
+                  vte_get_features ());
   exit (EXIT_SUCCESS);
+}
+
+static gboolean
+option_verbosity_cb (const gchar *option_name,
+                     const gchar *value,
+                     gpointer     data,
+                     GError     **error)
+{
+  if (g_str_equal (option_name, "--quiet") || g_str_equal (option_name, "-q"))
+    verbosity = 0;
+  else
+    verbosity++;
+
+  return TRUE;
 }
 
 static gboolean
@@ -295,12 +378,14 @@ option_command_callback (const gchar *option_name,
   GError *err = NULL;
   char  **exec_argv;
 
+  deprecated_command_option_warning (option_name);
+
   if (!g_shell_parse_argv (value, NULL, &exec_argv, &err))
     {
       g_set_error(error,
                   G_OPTION_ERROR,
                   G_OPTION_ERROR_BAD_VALUE,
-                  _("Argument to \"%s\" is not a valid command: %s"),
+                  _("Argument to “%s” is not a valid command: %s"),
                    "--command/-e",
                   err->message);
       g_error_free (err);
@@ -336,8 +421,8 @@ option_profile_cb (const gchar *option_name,
                                                      value, error);
   if (profile == NULL)
   {
-      g_printerr ("Profile '%s' specified but not found. Attempting to fall back "
-                  "to the default profile.\n", value);
+      terminal_printerr ("Profile '%s' specified but not found. Attempting to fall back "
+                         "to the default profile.\n", value);
       g_clear_error (error);
       profile = terminal_profiles_list_dup_uuid_or_name (terminal_options_ensure_profiles_list (options),
                                                          NULL, error);
@@ -402,22 +487,24 @@ option_window_callback (const gchar *option_name,
   TerminalOptions *options = data;
   char *profile;
 
-  profile = terminal_profiles_list_dup_uuid_or_name (terminal_options_ensure_profiles_list (options),
-                                                     value, error);
+  if (value != NULL) {
+    profile = terminal_profiles_list_dup_uuid_or_name (terminal_options_ensure_profiles_list (options),
+                                                       value, error);
 
-  if (value && profile == NULL)
-  {
-      g_printerr ("Profile '%s' specified but not found. Attempting to fall back "
-                  "to the default profile.\n", value);
+    if (value && profile == NULL) {
+      terminal_printerr ("Profile '%s' specified but not found. Attempting to fall back "
+                         "to the default profile.\n", value);
       g_clear_error (error);
       profile = terminal_profiles_list_dup_uuid_or_name (terminal_options_ensure_profiles_list (options),
                                                          NULL, error);
-  }
+    }
 
-  if (profile == NULL)
-    return FALSE;
+    if (profile == NULL)
+      return FALSE;
+  } else
+    profile = NULL;
 
-  add_new_window (options, profile /* adopts */);
+  add_new_window (options, profile /* adopts */, FALSE);
 
   return TRUE;
 }
@@ -431,10 +518,13 @@ option_tab_callback (const gchar *option_name,
   TerminalOptions *options = data;
   char *profile;
 
-  profile = terminal_profiles_list_dup_uuid_or_name (terminal_options_ensure_profiles_list (options),
-                                                     value, error);
-  if (profile == NULL)
-    return FALSE;
+  if (value != NULL) {
+    profile = terminal_profiles_list_dup_uuid_or_name (terminal_options_ensure_profiles_list (options),
+                                                       value, error);
+    if (profile == NULL)
+      return FALSE;
+  } else
+    profile = NULL;
 
   if (options->initial_windows)
     {
@@ -444,7 +534,7 @@ option_tab_callback (const gchar *option_name,
       iw->tabs = g_list_append (iw->tabs, initial_tab_new (profile /* adopts */));
     }
   else
-    add_new_window (options, profile /* adopts */);
+    add_new_window (options, profile /* adopts */, TRUE);
 
   return TRUE;
 }
@@ -489,8 +579,8 @@ option_show_menubar_callback (const gchar *option_name,
       iw = g_list_last (options->initial_windows)->data;
       if (iw->force_menubar_state && iw->menubar_state == TRUE)
         {
-          g_printerr (_("\"%s\" option given twice for the same window\n"),
-                        "--show-menubar");
+          terminal_printerr_detail (_("“%s” option given twice for the same window\n"),
+                                    "--show-menubar");
 
           return TRUE;
         }
@@ -522,8 +612,8 @@ option_hide_menubar_callback (const gchar *option_name,
 
       if (iw->force_menubar_state && iw->menubar_state == FALSE)
         {
-          g_printerr (_("\"%s\" option given twice for the same window\n"),
-                        "--hide-menubar");
+          terminal_printerr_detail (_("“%s” option given twice for the same window\n"),
+                                    "--hide-menubar");
           return TRUE;
         }
 
@@ -636,8 +726,6 @@ option_title_callback (const gchar *option_name,
 {
   TerminalOptions *options = data;
 
-  deprecated_option_warning (option_name);
-
   if (options->initial_windows)
     {
       InitialTab *it = ensure_top_tab (options);
@@ -679,6 +767,96 @@ option_working_directory_callback (const gchar *option_name,
 }
 
 static gboolean
+option_wait_cb (const gchar *option_name,
+                const gchar *value,
+                gpointer     data,
+                GError     **error)
+{
+  TerminalOptions *options = data;
+
+  if (options->initial_windows)
+    {
+      InitialTab *it = ensure_top_tab (options);
+
+      g_free (it->working_dir);
+      it->wait = TRUE;
+    }
+  else
+    {
+      options->default_wait = TRUE;
+    }
+
+  return TRUE;
+}
+
+static gboolean
+option_pass_fd_cb (const gchar *option_name,
+                   const gchar *value,
+                   gpointer     data,
+                   GError     **error)
+{
+  TerminalOptions *options = data;
+
+  errno = 0;
+  char *end;
+  gint64 v = g_ascii_strtoll (value, &end, 10);
+  if (errno || end == value || v == -1 || v < G_MININT || v > G_MAXINT) {
+    g_set_error (error, G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+                 "Failed to parse \"%s\" as file descriptor number",
+                 value);
+    return FALSE;
+  }
+
+  int fd = v;
+  if (fd == STDIN_FILENO ||
+      fd == STDOUT_FILENO ||
+      fd == STDERR_FILENO) {
+    g_set_error (error, G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+                 "FD passing of %s is not supported",
+                 fd == STDIN_FILENO ? "stdin" : fd == STDOUT_FILENO ? "stdout" : "stderr");
+    return FALSE;
+  }
+
+  InitialTab *it = ensure_top_tab (options);
+  if (it->fd_list == NULL)
+    it->fd_list = g_unix_fd_list_new ();
+  if (it->fd_array == NULL)
+    it->fd_array = g_array_sized_new (FALSE /* zero terminate */,
+                                      TRUE /* clear */,
+                                      sizeof (PassFdElement),
+                                      8 /* that should be plenty */);
+
+
+  for (guint i = 0; i < it->fd_array->len; i++) {
+    PassFdElement *e = &g_array_index (it->fd_array, PassFdElement, i);
+    if (e->fd == fd) {
+      g_set_error (error, G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+                   _("Cannot pass FD %d twice"), fd);
+      return FALSE;
+    }
+  }
+
+  int idx = g_unix_fd_list_append (it->fd_list, fd, error);
+  if (idx == -1) {
+    g_prefix_error (error, "%d: ", fd);
+    return FALSE;
+  }
+
+  PassFdElement e = { idx, fd };
+  g_array_append_val (it->fd_array, e);
+
+#if 0
+  if (fd == STDOUT_FILENO ||
+      fd == STDERR_FILENO)
+    verbosity = 0;
+  if (fd == STDIN_FILENO)
+    it->wait = TRUE;
+#endif
+
+  return TRUE;
+}
+
+static gboolean
 option_active_callback (const gchar *option_name,
                         const gchar *value,
                         gpointer     data,
@@ -715,24 +893,24 @@ option_zoom_callback (const gchar *option_name,
       g_set_error (error,
                    G_OPTION_ERROR,
                    G_OPTION_ERROR_BAD_VALUE,
-                   _("\"%s\" is not a valid zoom factor"),
+                   _("“%s” is not a valid zoom factor"),
                    value);
       return FALSE;
     }
 
   if (zoom < (TERMINAL_SCALE_MINIMUM + 1e-6))
     {
-      g_printerr (_("Zoom factor \"%g\" is too small, using %g\n"),
-                  zoom,
-                  TERMINAL_SCALE_MINIMUM);
+      terminal_printerr (_("Zoom factor “%g” is too small, using %g\n"),
+                         zoom,
+                         TERMINAL_SCALE_MINIMUM);
       zoom = TERMINAL_SCALE_MINIMUM;
     }
 
   if (zoom > (TERMINAL_SCALE_MAXIMUM - 1e-6))
     {
-      g_printerr (_("Zoom factor \"%g\" is too large, using %g\n"),
-                  zoom,
-                  TERMINAL_SCALE_MAXIMUM);
+      terminal_printerr (_("Zoom factor “%g” is too large, using %g\n"),
+                         zoom,
+                         TERMINAL_SCALE_MAXIMUM);
       zoom = TERMINAL_SCALE_MAXIMUM;
     }
 
@@ -768,7 +946,7 @@ digest_options_callback (GOptionContext *context,
           g_set_error (error,
                        G_OPTION_ERROR,
                        G_OPTION_ERROR_BAD_VALUE,
-                       _("Option \"%s\" requires specifying the command to run"
+                       _("Option “%s” requires specifying the command to run"
                          " on the rest of the command line"),
                        "--execute/-x");
           return FALSE;
@@ -785,8 +963,6 @@ digest_options_callback (GOptionContext *context,
 
 /**
  * terminal_options_parse:
- * @working_directory: the default working directory
- * @startup_id: the startup notification ID
  * @argcp: (inout) address of the argument count. Changed if any arguments were handled
  * @argvp: (inout) address of the argument vector. Any parameters understood by
  *   the terminal #GOptionContext are removed
@@ -798,9 +974,7 @@ digest_options_callback (GOptionContext *context,
  *   or %NULL on error.
  */
 TerminalOptions *
-terminal_options_parse (const char *working_directory,
-                        const char *startup_id,
-                        int *argcp,
+terminal_options_parse (int *argcp,
                         char ***argvp,
                         GError **error)
 {
@@ -810,15 +984,16 @@ terminal_options_parse (const char *working_directory,
   int i;
   char **argv = *argvp;
 
-  options = g_slice_new0 (TerminalOptions);
+  options = g_new0 (TerminalOptions, 1);
 
-  options->remote_arguments = FALSE;
+  options->print_environment = FALSE;
   options->default_window_menubar_forced = FALSE;
   options->default_window_menubar_state = TRUE;
   options->default_fullscreen = FALSE;
   options->default_maximize = FALSE;
   options->execute = FALSE;
 
+  const char *startup_id = g_getenv ("DESKTOP_STARTUP_ID");
   options->startup_id = g_strdup (startup_id && startup_id[0] ? startup_id : NULL);
   options->display_name = NULL;
   options->initial_windows = NULL;
@@ -828,8 +1003,28 @@ terminal_options_parse (const char *working_directory,
   options->zoom = 1.0;
   options->zoom_set = FALSE;
 
-  options->screen_number = -1;
-  options->default_working_dir = g_strdup (working_directory);
+  options->default_working_dir = g_get_current_dir ();
+
+  /* Collect info from gnome-terminal private env vars */
+  const char *server_unique_name = g_getenv (TERMINAL_ENV_SERVICE_NAME);
+  if (server_unique_name != NULL) {
+    if (g_dbus_is_unique_name (server_unique_name))
+      options->server_unique_name = g_strdup (server_unique_name);
+    else
+      terminal_printerr ("Warning: %s set but \"%s\" is not a unique D-Bus name.\n",
+                         TERMINAL_ENV_SERVICE_NAME,
+                         server_unique_name);
+  }
+
+  const char *parent_screen_object_path = g_getenv (TERMINAL_ENV_SCREEN);
+  if (parent_screen_object_path != NULL) {
+    if (g_variant_is_object_path (parent_screen_object_path))
+      options->parent_screen_object_path = g_strdup (parent_screen_object_path);
+    else
+      terminal_printerr ("Warning: %s set but \"%s\" is not a valid D-Bus object path.\n",
+                         TERMINAL_ENV_SCREEN,
+                         parent_screen_object_path);
+  }
 
   /* The old -x/--execute option is broken, so we need to pre-scan for it. */
   /* We now also support passing the command after the -- switch. */
@@ -845,6 +1040,9 @@ terminal_options_parse (const char *working_directory,
 
       if (!is_execute && !is_dashdash)
         continue;
+
+      if (is_execute)
+        deprecated_command_option_warning (argv[i]);
 
       options->execute = is_execute;
 
@@ -868,11 +1066,40 @@ terminal_options_parse (const char *working_directory,
   retval = g_option_context_parse (context, argcp, argvp, error);
   g_option_context_free (context);
 
-  if (retval)
-    return options;
+  if (!retval) {
+    terminal_options_free (options);
+    return NULL;
+  }
 
-  terminal_options_free (options);
-  return NULL;
+  /* Do this here so that gdk_display is initialized */
+  if (options->startup_id == NULL)
+    options->startup_id = terminal_client_get_fallback_startup_id ();
+  /* Still NULL? */
+  if (options->startup_id == NULL)
+    terminal_printerr_detail ("Warning: DESKTOP_STARTUP_ID not set and no fallback available.\n");
+
+  GdkDisplay *display = gdk_display_get_default ();
+  if (display != NULL)
+    options->display_name = g_strdup (gdk_display_get_name (display));
+
+  /* Sanity check */
+  guint wait = 0;
+  for (GList *lw = options->initial_windows;  lw != NULL; lw = lw->next) {
+    InitialWindow *iw = lw->data;
+    for (GList *lt = iw->tabs; lt != NULL; lt = lt->next) {
+      InitialTab *it = lt->data;
+      if (it->wait)
+        wait++;
+    }
+  }
+
+  if (wait > 1) {
+    g_set_error_literal (error, G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+                         _("Can only use --wait once"));
+    return FALSE;
+  }
+
+  return options;
 }
 
 /**
@@ -938,7 +1165,7 @@ terminal_options_merge_config (TerminalOptions *options,
 
       iw = initial_window_new (source_tag);
       initial_windows = g_list_append (initial_windows, iw);
-      apply_defaults (options, iw);
+      apply_window_defaults (options, iw);
 
       active_terminal = g_key_file_get_string (key_file, window_group, TERMINAL_CONFIG_WINDOW_PROP_ACTIVE_TAB, NULL);
       iw->role = g_key_file_get_string (key_file, window_group, TERMINAL_CONFIG_WINDOW_PROP_ROLE, NULL);
@@ -1008,7 +1235,14 @@ terminal_options_merge_config (TerminalOptions *options,
 void
 terminal_options_ensure_window (TerminalOptions *options)
 {
-  ensure_top_window (options);
+  gs_unref_object GSettings *global_settings =
+    g_settings_new (TERMINAL_SETTING_SCHEMA);
+
+  gs_free char *mode_str = g_settings_get_string (global_settings,
+                                                  TERMINAL_SETTING_NEW_TERMINAL_MODE_KEY);
+
+  gboolean implicit_if_first_window = g_str_equal (mode_str, "tab");
+  ensure_top_window (options, implicit_if_first_window);
 }
 
 /**
@@ -1030,6 +1264,9 @@ terminal_options_free (TerminalOptions *options)
   g_free (options->default_profile);
 
   g_strfreev (options->exec_argv);
+
+  g_free (options->server_unique_name);
+  g_free (options->parent_screen_object_path);
 
   g_free (options->display_name);
   g_free (options->startup_id);
@@ -1082,8 +1319,51 @@ get_goption_context (TerminalOptions *options)
       unsupported_option_callback,
       NULL, NULL
     },
-    { "preferences", 0, 0, G_OPTION_ARG_NONE, &options->show_preferences, N_("Show preferences window"), NULL },
-    { "version", 0, G_OPTION_FLAG_NO_ARG | G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_CALLBACK, option_version_cb, NULL, NULL },
+    {
+      "preferences",
+      0,
+      0,
+      G_OPTION_ARG_NONE,
+      &options->show_preferences,
+      N_("Show preferences window"),
+      NULL
+    },
+    {
+      "print-environment",
+      'p',
+      0,
+      G_OPTION_ARG_NONE,
+      &options->print_environment,
+      N_("Print environment variables to interact with the terminal"),
+      NULL
+    },
+    {
+      "version",
+      0,
+      G_OPTION_FLAG_NO_ARG | G_OPTION_FLAG_HIDDEN,
+      G_OPTION_ARG_CALLBACK,
+      option_version_cb,
+      NULL,
+      NULL
+    },
+    {
+      "verbose",
+      'v',
+      G_OPTION_FLAG_NO_ARG,
+      G_OPTION_ARG_CALLBACK,
+      option_verbosity_cb,
+      N_("Increase diagnostic verbosity"),
+      NULL
+    },
+    {
+      "quiet",
+      'q',
+      G_OPTION_FLAG_NO_ARG,
+      G_OPTION_ARG_CALLBACK,
+      option_verbosity_cb,
+      N_("Suppress output"),
+      NULL
+    },
     { NULL, 0, 0, 0, NULL, NULL, NULL }
   };
 
@@ -1198,7 +1478,7 @@ get_goption_context (TerminalOptions *options)
     {
       "title",
       't',
-      G_OPTION_FLAG_HIDDEN,
+      0,
       G_OPTION_ARG_CALLBACK,
       option_title_callback,
       N_("Set the initial terminal title"),
@@ -1214,12 +1494,31 @@ get_goption_context (TerminalOptions *options)
       N_("DIRNAME")
     },
     {
+      "wait",
+      0,
+      G_OPTION_FLAG_NO_ARG,
+      G_OPTION_ARG_CALLBACK,
+      option_wait_cb,
+      N_("Wait until the child exits"),
+      NULL
+    },
+    {
+      "fd",
+      0,
+      0,
+      G_OPTION_ARG_CALLBACK,
+      option_pass_fd_cb,
+      N_("Forward file descriptor"),
+      /* FD = file descriptor */
+      N_("FD")
+    },
+    {
       "zoom",
       0,
       0,
       G_OPTION_ARG_CALLBACK,
       option_zoom_callback,
-      N_("Set the terminal's zoom factor (1.0 = normal size)"),
+      N_("Set the terminal’s zoom factor (1.0 = normal size)"),
       N_("ZOOM")
     },
     { NULL, 0, 0, 0, NULL, NULL, NULL }
@@ -1305,10 +1604,11 @@ get_goption_context (TerminalOptions *options)
 
   GOptionContext *context;
   GOptionGroup *group;
+  gs_free char *parameter;
 
-  context = g_option_context_new (NULL);
+  parameter = g_strdup_printf ("[-- %s …]", _("COMMAND"));
+  context = g_option_context_new (parameter);
   g_option_context_set_translation_domain (context, GETTEXT_PACKAGE);
-  g_option_context_set_description (context, N_("GNOME Terminal Emulator"));
   g_option_context_set_ignore_unknown_options (context, FALSE);
 
   g_option_context_add_group (context, gtk_get_option_group (TRUE));

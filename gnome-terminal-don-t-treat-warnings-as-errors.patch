@@ -1,28 +1,26 @@
-From 28c3713056e80e686b9f6c97f528386e68ddd543 Mon Sep 17 00:00:00 2001
+From 86753edc8b08281107ac2109cfba22fc7e3fee20 Mon Sep 17 00:00:00 2001
 From: Debarshi Ray <debarshir@gnome.org>
 Date: Mon, 23 Feb 2015 18:54:36 +0100
 Subject: [PATCH] build: Don't treat warnings as errors
 
 ---
- configure.ac | 14 +++++++-------
- 1 file changed, 7 insertions(+), 7 deletions(-)
+ configure.ac | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
 
 diff --git a/configure.ac b/configure.ac
-index cf89a337d5cd..b1eecb474649 100644
+index e8b10de8a143..aa84883c10a3 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -294,13 +294,13 @@ CC_CHECK_FLAGS_APPEND([WARN_CFLAGS],[CFLAGS],[ \
+@@ -249,12 +249,12 @@ CC_CHECK_FLAGS_APPEND([WARN_CFLAGS],[CFLAGS],[ \
    -Wall \
    -Wcast-align \
    -Wendif-labels \
--  -Werror=declaration-after-statement \
 -  "-Werror=format=2 -Werror=format-nonliteral -Werror=format-security" \
 -  -Werror=implicit-function-declaration \
 -  -Werror=init-self \
 -  -Werror=missing-include-dirs \
 -  -Werror=missing-prototypes \
 -  -Werror=pointer-arith \
-+  -Wdeclaration-after-statement \
 +  "-Wformat=2 -Wformat-nonliteral -Wformat-security" \
 +  -Wimplicit-function-declaration \
 +  -Winit-self \
@@ -33,5 +31,5 @@ index cf89a337d5cd..b1eecb474649 100644
    -Wfloat-equal \
    -Wimplicit \
 -- 
-2.9.3
+2.14.4
 

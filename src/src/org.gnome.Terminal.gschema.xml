@@ -87,6 +87,12 @@
     <value nick='ibeam' value='1'/>
     <value nick='underline' value='2'/>
   </enum>
+  <enum id='org.gnome.Terminal.TextBlinkMode'>
+    <value nick='never' value='0'/>
+    <value nick='focused' value='1'/>
+    <value nick='unfocused' value='2'/>
+    <value nick='always' value='3'/>
+  </enum>
 
   <!-- SettingsList base schema -->
 
@@ -118,24 +124,34 @@
       <description>Human-readable name of the profile.</description>
     </key>
     <key name="foreground-color" type="s">
-      <default>'#00FF00'</default>
+      <default>'#D3D7CF'</default>
       <summary>Default color of text in the terminal</summary>
-      <description>Default color of text in the terminal, as a color specification (can be HTML-style hex digits, or a color name such as "red").</description>
+      <description>Default color of text in the terminal, as a color specification (can be HTML-style hex digits, or a color name such as “red”).</description>
     </key>
     <key name="background-color" type="s">
-      <default>'#000000'</default>
+      <default>'#2E3436'</default>
       <summary>Default color of terminal background</summary>
-      <description>Default color of terminal background, as a color specification (can be HTML-style hex digits, or a color name such as "red").</description>
+      <description>Default color of terminal background, as a color specification (can be HTML-style hex digits, or a color name such as “red”).</description>
     </key>
     <key name="bold-color" type="s">
       <default>'#000000'</default>
       <summary>Default color of bold text in the terminal</summary>
-      <description>Default color of bold text in the terminal, as a color specification (can be HTML-style hex digits, or a color name such as "red"). This is ignored if bold-color-same-as-fg is true.</description>
+      <description>Default color of bold text in the terminal, as a color specification (can be HTML-style hex digits, or a color name such as “red”). This is ignored if bold-color-same-as-fg is true.</description>
     </key>
     <key name="bold-color-same-as-fg" type="b">
       <default>true</default>
       <summary>Whether bold text should use the same color as normal text</summary>
       <description>If true, boldface text will be rendered using the same color as normal text.</description>
+    </key>
+    <key name="cell-height-scale" type="d">
+      <range min="1.0" max="2.0" />
+      <default>1.0</default>
+      <summary>Scale factor for the cell height to increase line spacing. (Does not increase the font’s height.)</summary>
+    </key>
+    <key name="cell-width-scale" type="d">
+      <range min="1.0" max="2.0" />
+      <default>1.0</default>
+      <summary>Scale factor for the cell width to increase letter spacing. (Does not increase the font’s width.)</summary>
     </key>
     <key name="cursor-colors-set" type="b">
       <default>false</default>
@@ -145,12 +161,12 @@
     <key name="cursor-background-color" type="s">
       <default>'#000000'</default>
       <summary>Cursor background color</summary>
-      <description>Custom color of the background of the terminal's cursor, as a color specification (can be HTML-style hex digits, or a color name such as "red"). This is ignored if cursor-colors-set is false.</description>
+      <description>Custom color of the background of the terminal’s cursor, as a color specification (can be HTML-style hex digits, or a color name such as “red”). This is ignored if cursor-colors-set is false.</description>
     </key>
     <key name="cursor-foreground-color" type="s">
       <default>'#ffffff'</default>
       <summary>Cursor foreground colour</summary>
-      <description>Custom color for the foreground of the text character at the terminal's cursor position, as a color specification (can be HTML-style hex digits, or a color name such as "red"). This is ignored if cursor-colors-set is false.</description>
+      <description>Custom color for the foreground of the text character at the terminal’s cursor position, as a color specification (can be HTML-style hex digits, or a color name such as “red”). This is ignored if cursor-colors-set is false.</description>
     </key>
     <key name="highlight-colors-set" type="b">
       <default>false</default>
@@ -160,17 +176,22 @@
     <key name="highlight-background-color" type="s">
       <default>'#000000'</default>
       <summary>Highlight background color</summary>
-      <description>Custom color of the background of the terminal's highlight, as a color specification (can be HTML-style hex digits, or a color name such as "red"). This is ignored if highlight-colors-set is false.</description>
+      <description>Custom color of the background of the terminal’s highlight, as a color specification (can be HTML-style hex digits, or a color name such as “red”). This is ignored if highlight-colors-set is false.</description>
     </key>
     <key name="highlight-foreground-color" type="s">
       <default>'#ffffff'</default>
       <summary>Highlight foreground colour</summary>
-      <description>Custom color for the foreground of the text character at the terminal's highlight position, as a color specification (can be HTML-style hex digits, or a color name such as "red"). This is ignored if highlight-colors-set is false.</description>
+      <description>Custom color for the foreground of the text character at the terminal’s highlight position, as a color specification (can be HTML-style hex digits, or a color name such as “red”). This is ignored if highlight-colors-set is false.</description>
     </key>
     <key name="allow-bold" type="b">
       <default>true</default>
       <summary>Whether to allow bold text</summary>
       <description>If true, allow applications in the terminal to make text boldface.</description>
+    </key>
+    <key name="bold-is-bright" type="b">
+      <default>true</default>
+      <summary>Whether bold is also bright</summary>
+      <description>If true, setting bold on the first 8 colors also switches to their bright variants.</description>
     </key>
     <key name="audible-bell" type="b">
       <default>true</default>
@@ -204,7 +225,7 @@
     <key name="scrollback-lines" type="i">
       <default>10000</default>
       <summary>Number of lines to keep in scrollback</summary>
-      <description>Number of scrollback lines to keep around. You can scroll back in the terminal by this number of lines; lines that don't fit in the scrollback are discarded. If scrollback_unlimited is true, this value is ignored.</description>
+      <description>Number of scrollback lines to keep around. You can scroll back in the terminal by this number of lines; lines that don’t fit in the scrollback are discarded. If scrollback_unlimited is true, this value is ignored.</description>
     </key>
     <key name="scrollback-unlimited" type="b">
       <default>false</default>
@@ -218,13 +239,13 @@
     </key>
     <key name="scroll-on-output" type="b">
       <default>false</default>
-      <summary>Whether to scroll to the bottom when there's new output</summary>
-      <description>If true, whenever there's new output the terminal will scroll to the bottom.</description>
+      <summary>Whether to scroll to the bottom when there’s new output</summary>
+      <description>If true, whenever there’s new output the terminal will scroll to the bottom.</description>
     </key>
     <key name="exit-action" enum="org.gnome.Terminal.ExitAction">
       <default>'close'</default>
       <summary>What to do with the terminal when the child command exits</summary>
-      <description>Possible values are "close" to close the terminal, "restart" to restart the command, and "hold" to keep the terminal open with no command running inside.</description>
+      <description>Possible values are “close” to close the terminal, “restart” to restart the command, and “hold” to keep the terminal open with no command running inside.</description>
     </key>
     <key name="login-shell" type="b">
       <default>false</default>
@@ -239,11 +260,15 @@
     <key name="cursor-blink-mode" enum="org.gnome.Terminal.Cursor.BlinkMode">
       <default>'system'</default>
       <summary>Whether to blink the cursor</summary>
-      <description>The possible values are "system" to use the global cursor blinking settings, or "on" or "off" to set the mode explicitly.</description>
+      <description>The possible values are “system” to use the global cursor blinking settings, or “on” or “off” to set the mode explicitly.</description>
     </key>
     <key name="cursor-shape" enum="org.gnome.Terminal.Cursor.Shape">
       <default>'block'</default>
       <summary>The cursor appearance</summary>
+    </key>
+    <key name="text-blink-mode" enum="org.gnome.Terminal.TextBlinkMode">
+      <default>'always'</default>
+      <summary>Possible values are “always” or “never” allow blinking text, or only when the terminal is “focused” or “unfocused”.</summary>
     </key>
     <key name="custom-command" type="s">
       <default>''</default>
@@ -251,22 +276,22 @@
       <description>Run this command in place of the shell, if use_custom_command is true.</description>
     </key>
     <key name="palette" type="as">
-      <default>["#2E2E34343636",
-                "#CCCC00000000",
-                "#4E4E9A9A0606",
-                "#C4C4A0A00000",
-                "#34346565A4A4",
-                "#757550507B7B",
-                "#060698209A9A",
-                "#D3D3D7D7CFCF",
-                "#555557575353",
-                "#EFEF29292929",
-                "#8A8AE2E23434",
-                "#FCFCE9E94F4F",
-                "#72729F9FCFCF",
-                "#ADAD7F7FA8A8",
-                "#3434E2E2E2E2",
-                "#EEEEEEEEECEC"]</default>
+      <default>["#2E3436",
+                "#CC0000",
+                "#4E9A06",
+                "#C4A000",
+                "#3465A4",
+                "#75507B",
+                "#06989A",
+                "#D3D7CF",
+                "#555753",
+                "#EF2929",
+                "#8AE234",
+                "#FCE94F",
+                "#729FCF",
+                "#AD7FA8",
+                "#34E2E2",
+                "#EEEEEC"]</default>
       <summary>Palette for terminal applications</summary>
     </key>
     <key name="font" type="s">
@@ -310,7 +335,11 @@
         <choice value="ISO-8859-14" />
         <choice value="ISO-8859-15" />
         <choice value="ISO-8859-16" />
+        <!-- <choice value="UTF-7" /> -->
         <choice value="UTF-8" />
+        <!-- <choice value="UTF-16" /> -->
+        <!-- <choice value="UTF-32" /> -->
+        <!-- <choice value="UCS-4" /> -->
         <choice value="ARMSCII-8" />
         <choice value="BIG5" />
         <choice value="BIG5-HKSCS" />
@@ -331,6 +360,7 @@
         <choice value="ISO-2022-JP" />
         <choice value="ISO-2022-KR" />
         <choice value="ISO-IR-111" />
+        <!-- <choice value="JOHAB" /> -->
         <choice value="KOI8-R" />
         <choice value="KOI8-U" />
         <choice value="MAC_ARABIC" />
@@ -383,13 +413,17 @@
       <default>'&lt;Ctrl&gt;&lt;Shift&gt;n'</default>
       <summary>Keyboard shortcut to open a new window</summary>
     </key>
-    <key name="new-profile" type="s">
-      <default>'disabled'</default>
-      <summary>Keyboard shortcut to create a new profile</summary>
-    </key>
     <key name="save-contents" type="s">
       <default>'disabled'</default>
       <summary>Keyboard shortcut to save the current tab contents to file</summary>
+    </key>
+    <key name="export" type="s">
+      <default>'disabled'</default>
+      <summary>Keyboard shortcut to export the current tab contents to file in various formats</summary>
+    </key>
+    <key name="print" type="s">
+      <default>'disabled'</default>
+      <summary>Keyboard shortcut to print the current tab contents to printer or file</summary>
     </key>
     <key name="close-tab" type="s">
       <default>'&lt;Ctrl&gt;&lt;Shift&gt;w'</default>
@@ -403,6 +437,10 @@
       <default>'&lt;Ctrl&gt;&lt;Shift&gt;c'</default>
       <summary>Keyboard shortcut to copy text</summary>
     </key>
+    <key name="copy-html" type="s">
+      <default>'disabled'</default>
+      <summary>Keyboard shortcut to copy text as HTML</summary>
+    </key>
     <key name="paste" type="s">
       <default>'&lt;Ctrl&gt;&lt;Shift&gt;v'</default>
       <summary>Keyboard shortcut to paste text</summary>
@@ -414,10 +452,6 @@
     <key name="preferences" type="s">
       <default>'disabled'</default>
       <summary>Keyboard shortcut to open the Preferences dialog</summary>
-    </key>
-    <key name="profile-preferences" type="s">
-      <default>'disabled'</default>
-      <summary>Keyboard shortcut to open the current profile's Preferences dialog</summary>
     </key>
     <key name="full-screen" type="s">
       <default>'F11'</default>
@@ -615,8 +649,12 @@
       <default>'disabled'</default>
       <summary>Keyboard shortcut to switch to the numbered tab</summary>
     </key>
+    <key name="switch-to-tab-last" type="s">
+      <default>'disabled'</default>
+      <summary>Keyboard shortcut to switch to the last tab</summary>
+    </key>
     <key name="help" type="s">
-      <default>'F1'</default>
+      <default>'disabled'</default>
       <summary>Keyboard shortcut to launch help</summary>
     </key>
     <key name="zoom-in" type="s">
@@ -643,7 +681,7 @@
       <description>
         Whether to have Alt+letter access keys for the menubar.
         They may interfere with some applications run inside the terminal
-        so it's possible to turn them off.
+        so it’s possible to turn them off.
       </description>
     </key>
 
@@ -653,7 +691,7 @@
       <description>
         Whether shortcuts are enabled.
         They may interfere with some applications run inside the terminal
-        so it's possible to turn them off.
+        so it’s possible to turn them off.
       </description>
     </key>
 
@@ -671,23 +709,6 @@
     <key name="shell-integration-enabled" type="b">
       <default>true</default>
       <summary>Whether the shell integration is enabled</summary>
-    </key>
-
-    <key name="encodings" type="as">
-      <!-- Translators: Please note that this has to be a list of
-           valid encodings (which are to be taken from the list in src/encoding.c).
-           It has to include UTF-8 the list entries themselves are not to be
-           translated. This is provided for customization of the default encoding
-           menu; see bug 144810 for an use case. In most cases, this should be
-           left alone.
-      -->
-      <default>["UTF-8"]</default>
-      <summary>List of available encodings</summary>
-      <description>
-        A subset of possible encodings are presented in
-        the Encoding submenu. This is a list of encodings
-        to appear there.
-      </description>
     </key>
 
     <key name="confirm-close" type="b">

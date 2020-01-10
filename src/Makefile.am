@@ -29,7 +29,7 @@ appdata_in_files = \
 	org.gnome.Terminal.Nautilus.metainfo.xml.in \
 	$(NULL)
 
-appdatadir = $(datadir)/appdata
+appdatadir = $(datadir)/metainfo
 nodist_appdata_DATA = \
 	org.gnome.Terminal.appdata.xml \
 	$(NULL)
@@ -43,6 +43,8 @@ endif
 check-local: desktop-file-validate
 
 EXTRA_DIST = 			\
+	COPYING                 \
+	COPYING.GFDL            \
 	$(appdata_in_files)	\
 	ChangeLog.pre-2-23	\
 	ChangeLog.README	\

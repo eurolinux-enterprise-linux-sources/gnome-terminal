@@ -40,9 +40,7 @@
 #include "terminal-accels.h"
 #include "terminal-app.h"
 #include "terminal-intl.h"
-#include "terminal-screen.h"
 #include "terminal-util.h"
-#include "terminal-window.h"
 #include "terminal-libgsystem.h"
 
 /**
@@ -120,18 +118,22 @@ open_url (GtkWindow *parent,
           GError **error)
 {
   GdkScreen *screen;
+  gs_free char *uri_fixed;
 
   if (parent)
     screen = gtk_widget_get_screen (GTK_WIDGET (parent));
   else
     screen = gdk_screen_get_default ();
 
-  return gtk_show_uri (screen, uri, user_time, error);
+  uri_fixed = terminal_util_uri_fixup (uri, error);
+  if (uri_fixed == NULL)
+    return FALSE;
+
+  return gtk_show_uri (screen, uri_fixed, user_time, error);
 }
 
 void
-terminal_util_show_help (const char *topic, 
-                         GtkWindow  *parent)
+terminal_util_show_help (const char *topic)
 {
   gs_free_error GError *error = NULL;
   gs_free char *uri;
@@ -142,9 +144,9 @@ terminal_util_show_help (const char *topic,
     uri = g_strdup ("help:gnome-terminal");
   }
 
-  if (!open_url (GTK_WINDOW (parent), uri, gtk_get_current_event_time (), &error))
+  if (!open_url (NULL, uri, gtk_get_current_event_time (), &error))
     {
-      terminal_util_show_error_dialog (GTK_WINDOW (parent), NULL, error,
+      terminal_util_show_error_dialog (NULL, NULL, error,
                                        _("There was an error displaying help"));
     }
 }
@@ -154,13 +156,14 @@ terminal_util_show_help (const char *topic,
 #define EMAILIFY(string) (g_strdelimit ((string), "%", '@'))
 
 void
-terminal_util_show_about (GtkWindow *transient_parent)
+terminal_util_show_about (void)
 {
   static const char copyright[] =
     "Copyright © 2002–2004 Havoc Pennington\n"
     "Copyright © 2003–2004, 2007 Mariano Suárez-Alvarez\n"
     "Copyright © 2006 Guilherme de S. Pastore\n"
-    "Copyright © 2007–2016 Christian Persch";
+    "Copyright © 2007–2018 Christian Persch\n"
+    "Copyright © 2013–2018 Egmont Koblinger";
   char *licence_text;
   GKeyFile *key_file;
   GBytes *bytes;
@@ -172,6 +175,7 @@ terminal_util_show_about (GtkWindow *transient_parent)
   GPtrArray *array;
   gs_free char *comment;
   gs_free char *vte_version;
+  GtkWindow *dialog;
 
   bytes = g_resources_lookup_data (TERMINAL_RESOURCES_PATH_PREFIX "/ui/terminal.about",
                                    G_RESOURCE_LOOKUP_FLAGS_NONE,
@@ -226,7 +230,9 @@ terminal_util_show_about (GtkWindow *transient_parent)
                             vte_version,
                             vte_get_features ());
 
-  gtk_show_about_dialog (transient_parent,
+  dialog = g_object_new (GTK_TYPE_ABOUT_DIALOG,
+                         /* Hold the application while the window is shown */
+                         "application", terminal_app_get (),
                          "program-name", _("GNOME Terminal"),
                          "copyright", copyright,
                          "comments", comment,
@@ -240,6 +246,9 @@ terminal_util_show_about (GtkWindow *transient_parent)
                          "translator-credits", _("translator-credits"),
                          "logo-icon-name", GNOME_TERMINAL_ICON_NAME,
                          NULL);
+
+  g_signal_connect (dialog, "response", G_CALLBACK (gtk_widget_destroy), NULL);
+  gtk_window_present (dialog);
 
   g_strfreev (array_strv);
   g_strfreev (artists);
@@ -265,11 +274,10 @@ terminal_util_set_atk_name_description (GtkWidget  *widget,
       return;
     }
 
-  
   if (!GTK_IS_ACCESSIBLE (obj))
     return; /* This means GAIL is not loaded so we have the NoOp accessible */
-      
-  g_return_if_fail (GTK_IS_ACCESSIBLE (obj));  
+
+  g_return_if_fail (GTK_IS_ACCESSIBLE (obj));
   if (desc)
     atk_object_set_description (obj, desc);
   if (name)
@@ -400,13 +408,13 @@ main_object_destroy_cb (GtkWidget *widget)
   g_object_set_data (G_OBJECT (widget), "builder", NULL);
 }
 
-void
-terminal_util_load_builder_resource (const char *path,
+GtkBuilder *
+terminal_util_load_widgets_resource (const char *path,
                                      const char *main_object_name,
                                      const char *object_name,
                                      ...)
 {
-  gs_unref_object GtkBuilder *builder;
+  GtkBuilder *builder;
   GError *error = NULL;
   va_list args;
 
@@ -446,6 +454,38 @@ terminal_util_load_builder_resource (const char *path,
       gtk_widget_set_margin_bottom (action_area, 5);
     }
   }
+  return builder;
+}
+
+void
+terminal_util_load_objects_resource (const char *path,
+                                     const char *object_name,
+                                     ...)
+{
+  gs_unref_object GtkBuilder *builder;
+  GError *error = NULL;
+  va_list args;
+
+  builder = gtk_builder_new ();
+  gtk_builder_add_from_resource (builder, path, &error);
+  g_assert_no_error (error);
+
+  va_start (args, object_name);
+
+  while (object_name) {
+    GObject **objectptr;
+
+    objectptr = va_arg (args, GObject**);
+    *objectptr = gtk_builder_get_object (builder, object_name);
+    if (*objectptr)
+      g_object_ref (*objectptr);
+    else
+      g_error ("Failed to fetch object \"%s\" from resource \"%s\"\n", object_name, path);
+
+    object_name = va_arg (args, const char*);
+  }
+
+  va_end (args);
 }
 
 gboolean
@@ -456,16 +496,14 @@ terminal_util_dialog_response_on_delete (GtkWindow *widget)
 }
 
 void
-terminal_util_dialog_focus_widget (GtkWidget *dialog,
+terminal_util_dialog_focus_widget (GtkBuilder *builder,
                                    const char *widget_name)
 {
-  GtkBuilder *builder;
   GtkWidget *widget, *page, *page_parent;
 
   if (widget_name == NULL)
     return;
 
-  builder = g_object_get_data (G_OBJECT (dialog), "builder");
   widget = GTK_WIDGET (gtk_builder_get_object (builder, widget_name));
   if (widget == NULL)
     return;
@@ -659,64 +697,6 @@ terminal_util_add_proxy_env (GHashTable *env_table)
     {
       setup_autoconfig_proxy_env (proxy_settings, env_table);
     }
-}
-
-GdkScreen*
-terminal_util_get_screen_by_display_name (const char *display_name,
-                                          int screen_number)
-{
-  GdkDisplay *display = NULL;
-  GdkScreen *screen = NULL;
-
-  /* --screen=screen_number overrides --display */
-
-  if (display_name == NULL)
-    display = gdk_display_get_default ();
-  else
-    {
-      GSList *displays, *l;
-      const char *period;
-
-      period = strrchr (display_name, '.');
-      if (period)
-        {
-          gulong n;
-          char *end;
-
-          errno = 0;
-          end = NULL;
-          n = g_ascii_strtoull (period + 1, &end, 0);
-          if (errno == 0 && (period + 1) != end)
-            screen_number = n;
-        }
-
-      displays = gdk_display_manager_list_displays (gdk_display_manager_get ());
-      for (l = displays; l != NULL; l = l->next)
-        {
-          GdkDisplay *disp = l->data;
-
-          /* compare without the screen number part, if present */
-          if ((period && strncmp (gdk_display_get_name (disp), display_name, period - display_name) == 0) ||
-              (period == NULL && strcmp (gdk_display_get_name (disp), display_name) == 0))
-            {
-              display = disp;
-              break;
-            }
-        }
-      g_slist_free (displays);
-
-      if (display == NULL)
-        display = gdk_display_open (display_name); /* FIXME we never close displays */
-    }
-
-  if (display == NULL)
-    return NULL;
-  if (screen_number >= 0)
-    screen = gdk_display_get_screen (display, screen_number);
-  if (screen == NULL)
-    screen = gdk_display_get_default_screen (display);
-
-  return screen;
 }
 
 /**
@@ -1103,4 +1083,349 @@ terminal_util_number_info (const char *str)
   }
 
   return g_strdup_printf(hex ? "0x%2$s = %1$s%3$s" : "%s = 0x%s%s", decstr, hexstr, magnitudestr);
+}
+
+/**
+ * terminal_util_uri_fixup:
+ * @uri: The URI to verify and maybe fixup
+ * @error: a #GError that is returned in case of errors
+ *
+ * Checks if gnome-terminal should attempt to handle the given URI,
+ * and rewrites if necessary.
+ *
+ * Currently URIs of "file://some-other-host/..." are refused because
+ * GIO (e.g. gtk_show_uri()) silently strips off the remote hostname
+ * and opens the local counterpart which is incorrect and misleading.
+ *
+ * Furthermore, once the hostname is verified, it is stripped off to
+ * avoid potential confusion around short hostname vs. fqdn, and to
+ * work around bug 781800 (LibreOffice bug 107461).
+ *
+ * Returns: The possibly rewritten URI if gnome-terminal should attempt
+ *   to handle it, NULL if it should refuse to handle.
+ */
+char *
+terminal_util_uri_fixup (const char *uri,
+                         GError **error)
+{
+  gs_free char *filename;
+  gs_free char *hostname;
+
+  filename = g_filename_from_uri (uri, &hostname, NULL);
+  if (filename != NULL &&
+      hostname != NULL &&
+      hostname[0] != '\0') {
+    /* "file" scheme and nonempty hostname */
+    if (g_ascii_strcasecmp (hostname, "localhost") == 0 ||
+        g_ascii_strcasecmp (hostname, g_get_host_name()) == 0) {
+      /* hostname corresponds to localhost */
+      char *slash1, *slash2, *slash3;
+
+      /* We shouldn't enter this branch in case of URIs like
+       * "file:/etc/passwd", but just in case we do, or encounter
+       * something else unexpected, leave the URI unchanged. */
+      slash1 = strchr(uri, '/');
+      if (slash1 == NULL)
+        return g_strdup (uri);
+
+      slash2 = slash1 + 1;
+      if (*slash2 != '/')
+        return g_strdup (uri);
+
+      slash3 = strchr(slash2 + 1, '/');
+      if (slash3 == NULL)
+        return g_strdup (uri);
+
+      return g_strdup_printf("%.*s%s",
+                             (int) (slash2 + 1 - uri),
+                             uri,
+                             slash3);
+    } else {
+      /* hostname refers to another host (e.g. the OSC 8 escape sequence
+       * was correctly emitted by a utility inside an ssh session) */
+      g_set_error_literal (error,
+                           G_IO_ERROR,
+                           G_IO_ERROR_NOT_SUPPORTED,
+                         _("“file” scheme with remote hostname not supported"));
+      return NULL;
+    }
+  } else {
+    /* "file" scheme without hostname, or some other scheme */
+    return g_strdup (uri);
+  }
+}
+
+/**
+ * terminal_util_hyperlink_uri_label:
+ * @uri: a URI
+ *
+ * Formats @uri to be displayed in a tooltip.
+ * Performs URI-decoding and converts IDN hostname to UTF-8.
+ *
+ * Returns: (transfer full): The human readable URI as plain text
+ */
+char *terminal_util_hyperlink_uri_label (const char *uri)
+{
+  gs_free char *unesc = NULL;
+  gboolean replace_hostname;
+
+  if (uri == NULL)
+    return NULL;
+
+  unesc = g_uri_unescape_string(uri, NULL);
+  if (unesc == NULL)
+    unesc = g_strdup(uri);
+
+  if (g_ascii_strncasecmp(unesc, "ftp://", 6) == 0 ||
+      g_ascii_strncasecmp(unesc, "http://", 7) == 0 ||
+      g_ascii_strncasecmp(unesc, "https://", 8) == 0) {
+    gs_free char *unidn = NULL;
+    char *hostname = strchr(unesc, '/') + 2;
+    char *hostname_end = strchrnul(hostname, '/');
+    char save = *hostname_end;
+    *hostname_end = '\0';
+    unidn = g_hostname_to_unicode(hostname);
+    replace_hostname = unidn != NULL && g_ascii_strcasecmp(unidn, hostname) != 0;
+    *hostname_end = save;
+    if (replace_hostname) {
+      char *new_unesc = g_strdup_printf("%.*s%s%s",
+                                        (int) (hostname - unesc),
+                                        unesc,
+                                        unidn,
+                                        hostname_end);
+      g_free(unesc);
+      unesc = new_unesc;
+    }
+  }
+
+  return terminal_util_utf8_make_valid (unesc, -1);
+}
+
+/**
+ * terminal_util_utf8_make_valid:
+ *
+ * Just as g_utf8_make_valid().
+ *
+ * FIXME: Use g_utf8_make_valid() instead once we require glib >= 2.52.
+ */
+gchar *
+terminal_util_utf8_make_valid (const gchar *str,
+                               gssize       len)
+{
+  /* copied from glib's g_utf8_make_valid() implementation */
+  GString *string;
+  const gchar *remainder, *invalid;
+  gsize remaining_bytes, valid_bytes;
+
+  g_return_val_if_fail (str != NULL, NULL);
+
+  if (len < 0)
+    len = strlen (str);
+
+  string = NULL;
+  remainder = str;
+  remaining_bytes = len;
+
+  while (remaining_bytes != 0)
+    {
+      if (g_utf8_validate (remainder, remaining_bytes, &invalid))
+	break;
+      valid_bytes = invalid - remainder;
+
+      if (string == NULL)
+	string = g_string_sized_new (remaining_bytes);
+
+      g_string_append_len (string, remainder, valid_bytes);
+      /* append U+FFFD REPLACEMENT CHARACTER */
+      g_string_append (string, "\357\277\275");
+
+      remaining_bytes -= valid_bytes + 1;
+      remainder = invalid + 1;
+    }
+
+  if (string == NULL)
+    return g_strndup (str, len);
+
+  g_string_append_len (string, remainder, remaining_bytes);
+  g_string_append_c (string, '\0');
+
+  g_assert (g_utf8_validate (string->str, -1, NULL));
+
+  return g_string_free (string, FALSE);
+}
+
+#define TERMINAL_CACHE_DIR                 "gnome-terminal"
+#define TERMINAL_PRINT_SETTINGS_FILENAME   "print-settings.ini"
+#define TERMINAL_PRINT_SETTINGS_GROUP_NAME "Print Settings"
+#define TERMINAL_PAGE_SETUP_GROUP_NAME     "Page Setup"
+
+#define KEYFILE_FLAGS_FOR_LOAD (G_KEY_FILE_NONE)
+#define KEYFILE_FLAGS_FOR_SAVE (G_KEY_FILE_KEEP_COMMENTS | G_KEY_FILE_KEEP_TRANSLATIONS)
+
+static char *
+get_cache_dir (void)
+{
+  return g_build_filename (g_get_user_cache_dir (), TERMINAL_CACHE_DIR, NULL);
+}
+
+static gboolean
+ensure_cache_dir (void)
+{
+  gs_free char *cache_dir;
+  int r;
+
+  cache_dir = get_cache_dir ();
+  errno = 0;
+  r = g_mkdir_with_parents (cache_dir, 0700);
+  if (r == -1 && errno != EEXIST)
+    g_printerr ("Failed to create cache dir: %m\n");
+  return r == 0;
+}
+
+static char *
+get_cache_filename (const char *filename)
+{
+  gs_free char *cache_dir = get_cache_dir ();
+  return g_build_filename (cache_dir, filename, NULL);
+}
+
+static GKeyFile *
+load_cache_keyfile (const char *filename,
+                    GKeyFileFlags flags,
+                    gboolean ignore_error)
+{
+  gs_free char *path;
+  GKeyFile *keyfile;
+
+  path = get_cache_filename (filename);
+  keyfile = g_key_file_new ();
+  if (g_key_file_load_from_file (keyfile, path, flags, NULL) || ignore_error)
+    return keyfile;
+
+  g_key_file_unref (keyfile);
+  return NULL;
+}
+
+static void
+save_cache_keyfile (GKeyFile *keyfile,
+                    const char *filename)
+{
+  gs_free char *path = NULL;
+  gs_free char *data = NULL;
+  gsize len = 0;
+
+  if (!ensure_cache_dir ())
+    return;
+
+  data = g_key_file_to_data (keyfile, &len, NULL);
+  if (data == NULL || len == 0)
+    return;
+
+  path = get_cache_filename (filename);
+
+  /* Ignore errors */
+  GError *err = NULL;
+  if (!g_file_set_contents (path, data, len, &err)) {
+    g_printerr ("Error saving print settings: %s\n", err->message);
+    g_error_free (err);
+  }
+}
+
+static void
+keyfile_remove_keys (GKeyFile *keyfile,
+                     const char *group_name,
+                     ...)
+{
+  va_list args;
+  const char *key;
+
+  va_start (args, group_name);
+  while ((key = va_arg (args, const char *)) != NULL) {
+    g_key_file_remove_key (keyfile, group_name, key, NULL);
+  }
+  va_end (args);
+}
+
+/**
+ * terminal_util_load_print_settings:
+ *
+ * Loads the saved print settings, if any.
+ */
+void
+terminal_util_load_print_settings (GtkPrintSettings **settings,
+                                   GtkPageSetup **page_setup)
+{
+  gs_unref_key_file GKeyFile *keyfile = load_cache_keyfile (TERMINAL_PRINT_SETTINGS_FILENAME,
+                                                            KEYFILE_FLAGS_FOR_LOAD,
+                                                            FALSE);
+  if (keyfile == NULL) {
+    *settings = NULL;
+    *page_setup = NULL;
+    return;
+  }
+
+  /* Ignore errors */
+  *settings = gtk_print_settings_new_from_key_file (keyfile,
+                                                    TERMINAL_PRINT_SETTINGS_GROUP_NAME,
+                                                    NULL);
+  *page_setup = gtk_page_setup_new_from_key_file (keyfile,
+                                                  TERMINAL_PAGE_SETUP_GROUP_NAME,
+                                                  NULL);
+}
+
+/**
+ * terminal_util_save_print_settings:
+ * @settings: (allow-none): a #GtkPrintSettings
+ * @page_setup: (allow-none): a #GtkPageSetup
+ *
+ * Saves the print settings.
+ */
+void
+terminal_util_save_print_settings (GtkPrintSettings *settings,
+                                   GtkPageSetup *page_setup)
+{
+  gs_unref_key_file GKeyFile *keyfile = NULL;
+
+  keyfile = load_cache_keyfile (TERMINAL_PRINT_SETTINGS_FILENAME,
+                                KEYFILE_FLAGS_FOR_SAVE,
+                                TRUE);
+  g_assert (keyfile != NULL);
+
+  if (settings != NULL)
+    gtk_print_settings_to_key_file (settings, keyfile,
+                                    TERMINAL_PRINT_SETTINGS_GROUP_NAME);
+
+  /* Some keys are not desirable to persist; remove these.
+   * This list comes from evince.
+   */
+  keyfile_remove_keys (keyfile,
+                       TERMINAL_PRINT_SETTINGS_GROUP_NAME,
+                       GTK_PRINT_SETTINGS_COLLATE,
+                       GTK_PRINT_SETTINGS_NUMBER_UP,
+                       GTK_PRINT_SETTINGS_N_COPIES,
+                       GTK_PRINT_SETTINGS_OUTPUT_URI,
+                       GTK_PRINT_SETTINGS_PAGE_RANGES,
+                       GTK_PRINT_SETTINGS_PAGE_SET,
+                       GTK_PRINT_SETTINGS_PRINT_PAGES,
+                       GTK_PRINT_SETTINGS_REVERSE,
+                       GTK_PRINT_SETTINGS_SCALE,
+                       NULL);
+
+  if (page_setup != NULL)
+    gtk_page_setup_to_key_file (page_setup, keyfile,
+                                TERMINAL_PAGE_SETUP_GROUP_NAME);
+
+  /* Some keys are not desirable to persist; remove these.
+   * This list comes from evince.
+   */
+  keyfile_remove_keys (keyfile,
+                       TERMINAL_PAGE_SETUP_GROUP_NAME,
+                       "page-setup-orientation",
+                       "page-setup-margin-bottom",
+                       "page-setup-margin-left",
+                       "page-setup-margin-right",
+                       "page-setup-margin-top",
+                       NULL);
+
+  save_cache_keyfile (keyfile, TERMINAL_PRINT_SETTINGS_FILENAME);
 }
